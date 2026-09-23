@@ -9,3 +9,4 @@
 - 14:31 · mustafa · Мустафа · roles: platform=ansar, data+models+agent=mustafa, weather+ideas=amirkhan; sample issue for the platform (R4, R8) · тесты: pass
 - 14:38 · amirkhan · Амирхан · feat: weather module with leak-safe previous-run selection and cache for both models (R2) · тесты: pass
 - 14:40 · ansar · Ансар · feat(api): forecast endpoints on the sample issue (R8) · тесты: pass
+- 15:01 · ansar · Ансар · feat(ui): forecast page — p10-p90 band tinted by weather-run staleness, agent trace (R8) · тесты: pass

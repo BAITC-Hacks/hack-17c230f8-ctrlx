@@ -3,295 +3,455 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>CtrlX · HackAlem</title>
+<title>WindCast · прогноз выработки ВЭС</title>
 <style>
   :root {
     color-scheme: light;
-    --bg: #f5f6f8;
-    --card: #ffffff;
-    --border: #e2e5ea;
-    --text: #1a1d23;
-    --muted: #6b7280;
-    --accent: #4f46e5;
-    --accent-contrast: #ffffff;
-    --danger: #dc2626;
-    --danger-bg: #fef2f2;
-    --badge-llm: #059669;
-    --badge-demo: #b45309;
+    --ground: #f7f8fa;
+    --surface: #ffffff;
+    --ink: #16202b;
+    --ink-soft: #5a6674;
+    --ink-faint: #8b95a1;
+    --grid: #dce1e8;
+    --accent: #0e7c86;
+    --accent-soft: rgba(14, 124, 134, 0.14);
+    --accent-faint: rgba(14, 124, 134, 0.07);
+    --warn: #b45309;
+    --warn-bg: #fdf6ec;
+    --fail: #b4232f;
+    --radius: 10px;
+    --ease: cubic-bezier(0.23, 1, 0.32, 1);
+    --sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    padding: 2rem 1rem;
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    display: flex;
-    justify-content: center;
+    padding: 24px 20px 48px;
+    background: var(--ground);
+    color: var(--ink);
+    font: 16px/1.5 var(--sans);
+    -webkit-font-smoothing: antialiased;
   }
-  main {
-    width: 100%;
-    max-width: 640px;
+  main { max-width: 1240px; margin: 0 auto; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---- header ---- */
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  h1 { font-size: 22px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+  .tagline { color: var(--ink-soft); font-size: 15px; }
+  .mode {
+    margin-left: auto; font: 600 12px/1 var(--mono); letter-spacing: 0.04em;
+    padding: 5px 8px; border-radius: 5px; border: 1px solid var(--grid); color: var(--ink-soft);
   }
-  h1 {
-    font-size: 1.375rem;
-    margin: 0 0 1.25rem;
+  .mode[data-mode="llm"] { color: #0f6b4f; border-color: #bfe0d2; background: #f0faf5; }
+
+  /* ---- issue bar ---- */
+  .issuebar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin: 16px 0; padding: 10px 12px;
+    background: var(--surface); border: 1px solid var(--grid); border-radius: var(--radius);
   }
+  .issuebar label { font-size: 13px; color: var(--ink-soft); }
+  button, select {
+    font: inherit; font-size: 14px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--grid); border-radius: 7px;
+    padding: 6px 10px; cursor: pointer;
+    transition: transform 140ms var(--ease), border-color 140ms ease, background 140ms ease;
+  }
+  button:active:not(:disabled) { transform: scale(0.97); }
+  button:disabled { color: var(--ink-faint); cursor: default; }
+  button:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  .step-btn { font: 600 15px/1 var(--mono); padding: 7px 11px; }
+  .issue-meta { font-size: 13px; color: var(--ink-soft); display: flex; gap: 14px; flex-wrap: wrap; }
+  .issue-meta b { color: var(--ink); font-weight: 600; }
+
+  /* ---- cards ---- */
   .card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 1.25rem;
-    margin-bottom: 1rem;
+    background: var(--surface); border: 1px solid var(--grid);
+    border-radius: var(--radius); padding: 16px 18px;
   }
-  textarea {
-    width: 100%;
-    min-height: 140px;
-    resize: vertical;
-    padding: 0.75rem;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font: inherit;
-    font-size: 0.95rem;
-    color: var(--text);
-    background: var(--card);
+  .card h2 {
+    font-size: 15px; font-weight: 650; margin: 0 0 12px;
+    display: flex; align-items: baseline; gap: 8px;
   }
-  textarea:focus {
-    outline: 2px solid var(--accent);
-    outline-offset: 1px;
+  .card h2 span { font-weight: 400; font-size: 13px; color: var(--ink-faint); }
+
+  /* ---- stats ---- */
+  .stats { display: flex; gap: 28px; flex-wrap: wrap; margin-bottom: 14px; }
+  .stat-v { font: 600 26px/1.1 var(--sans); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .stat-l { font-size: 13px; color: var(--ink-soft); margin-top: 3px; }
+  .stat-warn .stat-v { color: var(--warn); }
+
+  /* ---- chart ---- */
+  .chartwrap { position: relative; }
+  svg.chart { display: block; width: 100%; height: auto; touch-action: none; }
+  .anim-reveal { animation: reveal 260ms var(--ease) both; transform-origin: 50% 100%; }
+  @keyframes reveal { from { opacity: 0; transform: scaleY(0.97); } }
+  .tip {
+    position: absolute; pointer-events: none; opacity: 0;
+    background: var(--ink); color: #fff; border-radius: 7px;
+    padding: 7px 9px; font-size: 12.5px; line-height: 1.45; white-space: nowrap;
+    transition: opacity 120ms ease; transform: translate(-50%, -100%); z-index: 2;
   }
-  .actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    margin-top: 0.75rem;
+  .tip.on { opacity: 1; }
+  .tip .num { font-family: var(--mono); }
+
+  .legend {
+    display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
+    margin-top: 12px; font-size: 13px; color: var(--ink-soft);
   }
-  button {
-    background: var(--accent);
-    color: var(--accent-contrast);
-    border: none;
-    border-radius: 8px;
-    padding: 0.6rem 1.1rem;
-    font-size: 0.95rem;
-    font-weight: 600;
-    cursor: pointer;
+  .swatch { display: inline-block; width: 22px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 6px; }
+  .seg { display: flex; gap: 6px; margin-left: auto; }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+  /* ---- two columns ---- */
+  .cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; margin-top: 16px; align-items: start; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+
+  /* ---- agent trace ---- */
+  ol.trace { list-style: none; margin: 0; padding: 0; }
+  ol.trace li {
+    display: grid; grid-template-columns: 22px 1fr auto; gap: 10px;
+    padding: 9px 0; border-top: 1px solid var(--grid);
+    animation: stepin 220ms var(--ease) both;
   }
-  button:disabled {
-    opacity: 0.6;
-    cursor: default;
+  ol.trace li:first-child { border-top: 0; }
+  @keyframes stepin { from { opacity: 0; transform: translateY(4px); } }
+  .n { font: 600 13px/1.7 var(--mono); color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+  .tool { font: 600 14px/1.5 var(--mono); }
+  .sum { font-size: 14px; color: var(--ink-soft); margin-top: 2px; }
+  .dec {
+    font-size: 13px; margin-top: 5px; padding: 6px 8px; border-radius: 6px;
+    background: var(--ground); border-left: 2px solid var(--grid);
   }
-  .hint {
-    color: var(--muted);
-    font-size: 0.85rem;
+  .dec b { font-weight: 600; }
+  li[data-st="warn"] .dec { background: var(--warn-bg); border-left-color: var(--warn); }
+  .ms { font: 13px/1.7 var(--mono); color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+  .st { font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .st[data-st="ok"] { color: var(--ink-faint); }
+  .st[data-st="warn"] { color: var(--warn); }
+  .st[data-st="fail"] { color: var(--fail); }
+
+  /* ---- summary / warnings / metrics ---- */
+  .summary p { margin: 0 0 9px; font-size: 14.5px; }
+  .summary p:last-child { margin-bottom: 0; }
+  .summary strong { font-weight: 650; }
+  .warnbox {
+    margin-top: 12px; padding: 10px 12px; border-radius: 7px;
+    background: var(--warn-bg); border: 1px solid #f0dcc0; font-size: 13.5px;
   }
-  #result-card {
-    display: none;
+  .warnbox h3 { margin: 0 0 6px; font-size: 13.5px; color: var(--warn); }
+  .warnbox ul { margin: 0; padding-left: 18px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 7px 8px; text-align: right; border-top: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  th { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .empty { color: var(--ink-faint); font-size: 14px; }
+  .err { color: var(--fail); font-size: 14px; }
+
+  @media (hover: hover) and (pointer: fine) {
+    button:hover:not(:disabled) { border-color: var(--ink-faint); }
   }
-  .result-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
-  }
-  .label {
-    font-size: 1.1rem;
-    font-weight: 700;
-  }
-  .badge {
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    padding: 0.2rem 0.55rem;
-    border-radius: 999px;
-    white-space: nowrap;
-  }
-  .badge.llm {
-    color: var(--badge-llm);
-    background: color-mix(in srgb, var(--badge-llm) 15%, transparent);
-  }
-  .badge.demo {
-    color: var(--badge-demo);
-    background: color-mix(in srgb, var(--badge-demo) 15%, transparent);
-  }
-  .badge.pii {
-    color: var(--muted);
-    background: color-mix(in srgb, var(--muted) 15%, transparent);
-  }
-  .badge-group {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-  }
-  .score-row {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    margin-bottom: 0.75rem;
-  }
-  .score-bar {
-    flex: 1;
-    height: 8px;
-    border-radius: 999px;
-    background: var(--border);
-    overflow: hidden;
-  }
-  .score-bar > span {
-    display: block;
-    height: 100%;
-    background: var(--accent);
-  }
-  .score-value {
-    font-variant-numeric: tabular-nums;
-    font-size: 0.9rem;
-    color: var(--muted);
-    min-width: 3.5ch;
-    text-align: right;
-  }
-  .summary {
-    margin: 0 0 0.75rem;
-    line-height: 1.5;
-  }
-  .reasons {
-    margin: 0;
-    padding-left: 1.1rem;
-    color: var(--muted);
-    font-size: 0.9rem;
-    line-height: 1.6;
-  }
-  #error-card {
-    display: none;
-    background: var(--danger-bg);
-    border-color: color-mix(in srgb, var(--danger) 35%, transparent);
-    color: var(--danger);
-    font-size: 0.9rem;
+  @media (prefers-reduced-motion: reduce) {
+    .anim-reveal, ol.trace li { animation: none; }
+    button:active:not(:disabled) { transform: none; }
   }
 </style>
 </head>
 <body>
 <main>
-  <h1>CtrlX · HackAlem</h1>
+  <header>
+    <h1>WindCast</h1>
+    <span class="tagline">почасовой прогноз выработки ВЭС на 48 часов</span>
+    <span class="mode" id="mode">…</span>
+  </header>
 
-  <section class="card">
-    <textarea id="text" placeholder="Вставьте текст для анализа…"></textarea>
-    <div class="actions">
-      <button id="submit">Анализировать</button>
-      <span class="hint" id="hint"></span>
+  <div class="issuebar">
+    <label for="issue">Выпуск</label>
+    <button class="step-btn" id="prev" aria-label="Предыдущий выпуск">←</button>
+    <select id="issue"></select>
+    <button class="step-btn" id="next" aria-label="Следующий выпуск">→</button>
+    <div class="issue-meta" id="issue-meta"></div>
+  </div>
+
+  <section class="card" aria-labelledby="ch-h">
+    <h2 id="ch-h">Ожидаемая выработка <span>% от номинала, локальное время Алматы</span></h2>
+    <div class="stats" id="stats"></div>
+    <div class="chartwrap">
+      <svg class="chart" id="chart" viewBox="0 0 1000 300" role="img" aria-labelledby="ch-desc"></svg>
+      <p id="ch-desc" hidden></p>
+      <div class="tip" id="tip"></div>
     </div>
+    <div class="legend" id="legend"></div>
   </section>
 
-  <section class="card" id="result-card">
-    <div class="result-head">
-      <span class="label" id="result-label"></span>
-      <div class="badge-group">
-        <span class="badge" id="result-badge"></span>
-        <span class="badge pii" id="result-pii" style="display: none"></span>
-      </div>
+  <div class="cols">
+    <section class="card" aria-labelledby="tr-h">
+      <h2 id="tr-h">Что делал агент <span id="tr-sub"></span></h2>
+      <ol class="trace" id="trace"></ol>
+    </section>
+    <div>
+      <section class="card" aria-labelledby="sm-h">
+        <h2 id="sm-h">Сводка диспетчеру</h2>
+        <div class="summary" id="summary"></div>
+        <div id="warnings"></div>
+      </section>
+      <section class="card" style="margin-top:16px" aria-labelledby="mt-h">
+        <h2 id="mt-h">Точность на бэктесте</h2>
+        <div id="metrics"></div>
+      </section>
     </div>
-    <div class="score-row">
-      <div class="score-bar"><span id="score-fill"></span></div>
-      <span class="score-value" id="score-value"></span>
-    </div>
-    <p class="summary" id="result-summary"></p>
-    <ul class="reasons" id="result-reasons"></ul>
-  </section>
-
-  <section class="card" id="error-card"></section>
+  </div>
 </main>
 
 <script>
-  const textEl = document.getElementById("text");
-  const submitEl = document.getElementById("submit");
-  const hintEl = document.getElementById("hint");
-  const resultCard = document.getElementById("result-card");
-  const errorCard = document.getElementById("error-card");
-  const labelEl = document.getElementById("result-label");
-  const badgeEl = document.getElementById("result-badge");
-  const piiEl = document.getElementById("result-pii");
-  const scoreFillEl = document.getElementById("score-fill");
-  const scoreValueEl = document.getElementById("score-value");
-  const summaryEl = document.getElementById("result-summary");
-  const reasonsEl = document.getElementById("result-reasons");
+const $ = (id) => document.getElementById(id);
+const api = async (p) => {
+  const r = await fetch(`/api${p}`);
+  if (!r.ok) throw new Error(`${p} → ${r.status}`);
+  return r.json();
+};
+const pct = (v) => `${Math.round(v * 100)}%`;
+const hhmm = (iso) => iso.slice(11, 16);
+const dm = (iso) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
 
-  function resetPanels() {
-    resultCard.style.display = "none";
-    errorCard.style.display = "none";
+// previous_dayN = how stale the weather run was that the agent was allowed to use.
+const FRESH = {
+  day1: { label: "day1 · прогноз сутки назад", fill: "var(--accent-soft)", hatch: false },
+  day2: { label: "day2 · двое суток назад", fill: "var(--accent-faint)", hatch: true },
+  day3: { label: "day3 · трое суток назад", fill: "var(--accent-faint)", hatch: true },
+};
+
+let issues = [], idx = 0, rows = [], series = "power_farm";
+
+// ---------- chart ----------
+const M = { l: 44, r: 12, t: 10, b: 30 }, W = 1000, H = 300;
+const plotW = W - M.l - M.r, plotH = H - M.t - M.b;
+
+function draw() {
+  const svg = $("chart");
+  if (!rows.length) { svg.innerHTML = ""; return; }
+  const n = rows.length;
+  const x = (i) => M.l + (n === 1 ? plotW / 2 : (i * plotW) / (n - 1));
+  const y = (v) => M.t + plotH - v * plotH;           // power is normalised 0..1
+  const val = (r) => +r[series];
+
+  // y grid at 0 / 25 / 50 / 75 / 100 %
+  let g = "";
+  for (let p = 0; p <= 1.0001; p += 0.25) {
+    g += `<line x1="${M.l}" y1="${y(p)}" x2="${W - M.r}" y2="${y(p)}" stroke="var(--grid)" stroke-width="1"/>`;
+    g += `<text x="${M.l - 8}" y="${y(p) + 4}" text-anchor="end" font-size="12" fill="var(--ink-faint)" font-family="var(--mono)">${Math.round(p * 100)}</text>`;
   }
 
-  function showError(message) {
-    resetPanels();
-    errorCard.textContent = message;
-    errorCard.style.display = "block";
-  }
-
-  function showResult(data) {
-    resetPanels();
-    labelEl.textContent = data.label;
-    badgeEl.textContent = data.mode === "llm" ? "LLM" : "DEMO · без ключа";
-    badgeEl.className = "badge " + (data.mode === "llm" ? "llm" : "demo");
-    if (typeof data.masked_pii === "number" && data.masked_pii > 0) {
-      piiEl.textContent = "ПДн скрыты: " + data.masked_pii;
-      piiEl.style.display = "inline-block";
-    } else {
-      piiEl.style.display = "none";
-    }
-    const pct = Math.round(data.score * 100);
-    scoreFillEl.style.width = pct + "%";
-    scoreValueEl.textContent = pct + "%";
-    summaryEl.textContent = data.summary;
-    reasonsEl.innerHTML = "";
-    for (const reason of data.reasons || []) {
-      const li = document.createElement("li");
-      li.textContent = reason;
-      reasonsEl.appendChild(li);
-    }
-    resultCard.style.display = "block";
-  }
-
-  async function analyze() {
-    const text = textEl.value.trim();
-    if (!text) {
-      showError("Введите текст перед анализом.");
-      return;
-    }
-
-    submitEl.disabled = true;
-    hintEl.textContent = "Анализирую…";
-    resetPanels();
-
-    try {
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-
-      if (!res.ok) {
-        let detail = res.statusText;
-        try {
-          const body = await res.json();
-          detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
-        } catch (_) {
-          // response body wasn't JSON - keep statusText
-        }
-        showError(`Ошибка ${res.status}: ${detail}`);
-        return;
-      }
-
-      showResult(await res.json());
-    } catch (err) {
-      showError("Не удалось связаться с сервером: " + err.message);
-    } finally {
-      submitEl.disabled = false;
-      hintEl.textContent = "";
+  // uncertainty band, split into runs of equal wx_field so staleness is visible without hover
+  let bands = "";
+  let s = 0;
+  for (let i = 1; i <= n; i++) {
+    if (i === n || rows[i].wx_field !== rows[s].wx_field) {
+      const seg = rows.slice(s, i), off = s;
+      const top = seg.map((r, k) => `${x(off + k)},${y(+r.p90)}`).join(" ");
+      const bot = seg.map((r, k) => `${x(off + k)},${y(+r.p10)}`).reverse().join(" ");
+      const f = FRESH[rows[s].wx_field] || FRESH.day3;
+      bands += `<polygon points="${top} ${bot}" fill="${f.fill}"/>`;
+      if (f.hatch) bands += `<polygon points="${top} ${bot}" fill="url(#hatch)"/>`;
+      s = i;
     }
   }
 
-  submitEl.addEventListener("click", analyze);
-  textEl.addEventListener("keydown", (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") analyze();
+  const line = rows.map((r, i) => `${i ? "L" : "M"}${x(i)},${y(val(r))}`).join("");
+
+  // x axis: every 6 h, plus the 24 h boundary between the two horizons
+  // 6-hour ticks; midnight also carries the date, so day 2 is never mistaken for day 1
+  let xs = "";
+  for (let i = 0; i < n; i += 6) {
+    const t = rows[i].target_time_local;
+    const midnight = hhmm(t) === "00:00";
+    xs += `<text x="${x(i)}" y="${H - 9}" text-anchor="middle" font-size="12" font-family="var(--mono)"
+      fill="${midnight ? "var(--ink-soft)" : "var(--ink-faint)"}" font-weight="${midnight ? 600 : 400}">${midnight ? dm(t) : hhmm(t)}</text>`;
+  }
+  const b24 = rows.findIndex((r) => +r.lead_h === 24);
+  let div = "";
+  if (b24 > 0) {
+    div = `<line x1="${x(b24)}" y1="${M.t}" x2="${x(b24)}" y2="${M.t + plotH}" stroke="var(--ink-faint)" stroke-width="1" stroke-dasharray="3 3"/>
+           <text x="${x(b24) + 6}" y="${M.t + 13}" font-size="12" fill="var(--ink-soft)">48 ч →</text>
+           <text x="${x(b24) - 6}" y="${M.t + 13}" font-size="12" fill="var(--ink-soft)" text-anchor="end">← 24 ч</text>`;
+  }
+
+  svg.innerHTML = `
+    <defs><pattern id="hatch" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="var(--accent)" stroke-opacity="0.18" stroke-width="1"/>
+    </pattern></defs>
+    ${g}
+    <g class="anim-reveal">${bands}${div}
+      <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2.25" stroke-linejoin="round"/>
+    </g>
+    ${xs}
+    <line class="cross" x1="0" y1="${M.t}" x2="0" y2="${M.t + plotH}" stroke="var(--accent)" stroke-width="1" opacity="0"/>
+    <circle class="dot" r="4" fill="var(--accent)" stroke="#fff" stroke-width="2" opacity="0"/>
+    <rect x="${M.l}" y="${M.t}" width="${plotW}" height="${plotH}" fill="transparent" id="hit"/>`;
+
+  $("ch-desc").textContent = `Прогноз на ${n} часов, ${series}.`;
+  wireHover(x, y, val);
+}
+
+function wireHover(x, y, val) {
+  const svg = $("chart"), tip = $("tip"), hit = svg.querySelector("#hit");
+  const cross = svg.querySelector(".cross"), dot = svg.querySelector(".dot");
+  const move = (ev) => {
+    const box = svg.getBoundingClientRect();
+    const px = ((ev.clientX - box.left) / box.width) * W;
+    let i = Math.round(((px - M.l) / plotW) * (rows.length - 1));
+    i = Math.max(0, Math.min(rows.length - 1, i));
+    const r = rows[i];
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("opacity", "0.45");
+    dot.setAttribute("cx", x(i)); dot.setAttribute("cy", y(val(r))); dot.setAttribute("opacity", "1");
+    tip.innerHTML = `<b>${dm(r.target_time_local)} ${hhmm(r.target_time_local)}</b> · +${r.lead_h} ч
+      <br>выработка <span class="num">${pct(val(r))}</span> · p10–p90 <span class="num">${pct(+r.p10)}–${pct(+r.p90)}</span>
+      <br>ветер <span class="num">${(+r.ws100_fc).toFixed(1)}</span> м/с · погода ${r.wx_field}`;
+    tip.style.left = `${(x(i) / W) * 100}%`;
+    tip.style.top = `${(y(val(r)) / H) * box.height - 12}px`;
+    tip.classList.add("on");
+  };
+  hit.addEventListener("pointermove", move);
+  hit.addEventListener("pointerleave", () => {
+    tip.classList.remove("on");
+    cross.setAttribute("opacity", "0"); dot.setAttribute("opacity", "0");
   });
+}
+
+// ---------- panels ----------
+function renderStats() {
+  const v = rows.map((r) => +r[series]);
+  const mean = v.reduce((a, b) => a + b, 0) / v.length;
+  const pk = rows[v.indexOf(Math.max(...v))];
+  const width = rows.reduce((a, r) => a + (+r.p90 - +r.p10), 0) / rows.length;
+  const calm = v.filter((x) => x < 0.1).length;
+  $("stats").innerHTML = `
+    <div><div class="stat-v">${pct(mean)}</div><div class="stat-l">среднее за 48 ч</div></div>
+    <div><div class="stat-v">${pct(Math.max(...v))}</div><div class="stat-l">пик · ${dm(pk.target_time_local)} ${hhmm(pk.target_time_local)}</div></div>
+    <div><div class="stat-v">±${pct(width / 2)}</div><div class="stat-l">средняя неопределённость</div></div>
+    <div class="${calm ? "stat-warn" : ""}"><div class="stat-v">${calm} ч</div><div class="stat-l">штиль, ниже 10%</div></div>`;
+}
+
+function renderLegend() {
+  const used = [...new Set(rows.map((r) => r.wx_field))].sort();
+  const chips = used.map((f) => {
+    const c = FRESH[f] || FRESH.day3;
+    const bg = c.hatch
+      ? `background:var(--accent-faint);background-image:repeating-linear-gradient(45deg,rgba(14,124,134,.3) 0 1px,transparent 1px 5px)`
+      : `background:var(--accent-soft)`;
+    return `<span><span class="swatch" style="${bg}"></span>${c.label}</span>`;
+  }).join("");
+  $("legend").innerHTML = `
+    <span><span class="swatch" style="background:var(--accent);height:3px;border-radius:2px"></span>ожидаемая выработка</span>
+    ${chips}
+    <span class="seg" role="group" aria-label="Разрез">
+      ${[["power_farm", "парк"], ["power_t1", "турбина 1"], ["power_t2", "турбина 2"]]
+        .map(([k, l]) => `<button data-s="${k}" aria-pressed="${series === k}">${l}</button>`).join("")}
+    </span>`;
+  $("legend").querySelectorAll("[data-s]").forEach((b) =>
+    b.addEventListener("click", () => { series = b.dataset.s; draw(); renderStats(); renderLegend(); }));
+}
+
+function renderTrace(steps) {
+  $("tr-sub").textContent = steps.length ? `${steps.length} шагов` : "";
+  if (!steps.length) { $("trace").innerHTML = `<li class="empty">лог прогона пуст</li>`; return; }
+  const word = { ok: "ок", warn: "внимание", fail: "сбой" };
+  $("trace").innerHTML = steps.map((s, i) => `
+    <li data-st="${s.status}" style="animation-delay:${Math.min(i * 50, 400)}ms">
+      <span class="n">${s.step}</span>
+      <div>
+        <div class="tool">${s.tool}</div>
+        <div class="sum">${s.summary}</div>
+        ${s.decision ? `<div class="dec"><b>${s.decision}</b>${s.reason ? ` — ${s.reason}` : ""}</div>` : ""}
+      </div>
+      <div style="text-align:right">
+        <div class="st" data-st="${s.status}">${s.status === "ok" ? "" : "⚠ "}${word[s.status]}</div>
+        <div class="ms">${s.duration_ms} мс</div>
+      </div>
+    </li>`).join("");
+}
+
+function renderSummary(issue) {
+  const text = (issue.summary || "").split("\n")
+    .filter((l) => l.trim() && !l.startsWith("#"))
+    .map((l) => l.replace(/^[-*]\s*/, "").replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"));
+  $("summary").innerHTML = text.length
+    ? text.map((l) => `<p>${l}</p>`).join("")
+    : `<p class="empty">сводка появится после прогона агента</p>`;
+  $("warnings").innerHTML = issue.warnings?.length
+    ? `<div class="warnbox"><h3>⚠ Шаги агента с замечаниями: ${issue.warnings.length}</h3>
+       <ul>${issue.warnings.map((w) => `<li>${w}</li>`).join("")}</ul></div>`
+    : "";
+}
+
+function renderMetrics(reports) {
+  if (!reports.length) { $("metrics").innerHTML = `<p class="empty">метрики считаются — появятся после бэктеста</p>`; return; }
+  const r = reports[0];
+  $("metrics").innerHTML = `
+    <table><thead><tr><th>модель</th><th>гориз.</th><th>MAE</th><th>nMAE</th><th>сдвиг</th><th>n</th></tr></thead>
+    <tbody>${r.rows.map((m) => `<tr>
+      <td>${m.model}</td><td class="num">${m.horizon}</td>
+      <td class="num">${m.mae.toFixed(3)}</td><td class="num">${(m.nmae * 100).toFixed(1)}%</td>
+      <td class="num">${m.bias >= 0 ? "+" : ""}${m.bias.toFixed(3)}</td><td class="num">${m.n}</td>
+    </tr>`).join("")}</tbody></table>
+    <p class="stat-l" style="margin-top:8px">период ${r.period} · обучено до ${r.train_end}</p>`;
+}
+
+// ---------- load ----------
+async function loadIssue() {
+  const it = issues[idx];
+  $("issue").value = it.issue_date;
+  $("prev").disabled = idx === 0;
+  $("next").disabled = idx === issues.length - 1;
+  try {
+    const issue = await api(`/forecast/${it.issue_date}`);
+    rows = issue.rows;
+    $("issue-meta").innerHTML = `
+      <span>t0 <b>${dm(rows[0].issue_time_local)} ${hhmm(rows[0].issue_time_local)}</b> Алматы</span>
+      <span>модель <b>${issue.model_name}</b></span>
+      <span>погода <b>${rows[0].wx_model}</b></span>
+      <span>ревизия <b>${issue.revision}</b></span>
+      ${issue.fallback_used ? `<span style="color:var(--warn)"><b>⚠ был фолбэк</b></span>` : ""}`;
+    draw(); renderStats(); renderLegend(); renderSummary(issue);
+    renderTrace(await api(`/runs/${issue.run_id}/log`).catch(() => []));
+  } catch (e) {
+    $("stats").innerHTML = `<p class="err">не удалось загрузить выпуск: ${e.message}</p>`;
+  }
+}
+
+(async () => {
+  try {
+    const h = await api("/health");
+    $("mode").textContent = h.mode === "llm" ? "LLM" : "DEMO";
+    $("mode").dataset.mode = h.mode;
+  } catch { $("mode").textContent = "—"; }
+
+  renderMetrics(await api("/metrics").catch(() => []));
+
+  try {
+    issues = await api("/issues");
+  } catch (e) {
+    $("stats").innerHTML = `<p class="err">API недоступен: ${e.message}</p>`;
+    return;
+  }
+  if (!issues.length) {
+    $("stats").innerHTML = `<p class="empty">выпусков ещё нет — запустите <code>uv run python -m app.cli backtest</code></p>`;
+    $("trace").innerHTML = `<li class="empty">—</li>`;
+    $("summary").innerHTML = `<p class="empty">—</p>`;
+    return;
+  }
+  $("issue").innerHTML = issues.map((i) => `<option value="${i.issue_date}">${i.issue_date}</option>`).join("");
+  idx = issues.length - 1;
+  $("issue").addEventListener("change", (e) => { idx = issues.findIndex((i) => i.issue_date === e.target.value); loadIssue(); });
+  $("prev").addEventListener("click", () => { if (idx > 0) { idx--; loadIssue(); } });
+  $("next").addEventListener("click", () => { if (idx < issues.length - 1) { idx++; loadIssue(); } });
+  loadIssue();
+})();
 </script>
 </body>
 </html>
