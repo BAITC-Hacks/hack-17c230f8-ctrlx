@@ -14,16 +14,16 @@
 ## Требования
 | R-ID | Приоритет | Требование (из ТЗ) | Приёмка: вход → ожидаемый выход | Владелец | Статус |
 |---|---|---|---|---|---|
-| R1 | must | Загрузка исторических данных двух турбин, приведение к часам, флаги простоя и дыр, время Asia/Almaty → UTC | `data/raw/*.csv` → `data/processed/hourly.parquet` по `HOURLY_COLUMNS`, ~25 000 часов × 2 турбины, лог допущений в stdout | amirkhan | ❌ |
-| R2 | must | Агент сам получает по координатам архивные прогнозы (Open-Meteo Previous Runs), кэш-first, правило day1/day2/day3 против утечки | `app.weather.load_or_fetch()` → `WEATHER_COLUMNS`; `select_for_issue(wx, t0, hours_since_issue)` → `ISSUE_WEATHER_COLUMNS`; `tests/test_weather.py` проверяет, что для каждой строки `safe_previous_day(lead)` ≤ выбранного N | ansar | ❌ |
-| R3 | must | Модель почасовой выработки: B0 персистентность, B1 кривая мощности на прогнозном ветре (MOS), M1 GBM с квантилями p10/p90; обучение на данных до 31.01.2026 | `uv run python -m app.cli train` → `models/*.pkl` ≤ 50 МБ; `app.models.predict(model_name, features)` → power_t1, power_t2, p10, p90 | amirkhan | ❌ |
+| R1 | must | Загрузка исторических данных двух турбин, приведение к часам, флаги простоя и дыр, время Asia/Almaty → UTC | `data/raw/*.csv` → `data/processed/hourly.parquet` по `HOURLY_COLUMNS`, ~25 000 часов × 2 турбины, лог допущений в stdout | mustafa | ❌ |
+| R2 | must | Агент сам получает по координатам архивные прогнозы (Open-Meteo Previous Runs), кэш-first, правило day1/day2/day3 против утечки | `app.weather.load_or_fetch()` → `WEATHER_COLUMNS`; `select_for_issue(wx, t0, hours_since_issue)` → `ISSUE_WEATHER_COLUMNS`; `tests/test_weather.py` проверяет, что для каждой строки `safe_previous_day(lead)` ≤ выбранного N | amirkhan | ❌ |
+| R3 | must | Модель почасовой выработки: B0 персистентность, B1 кривая мощности на прогнозном ветре (MOS), M1 GBM с квантилями p10/p90; обучение на данных до 31.01.2026 | `uv run python -m app.cli train` → `models/*.pkl` ≤ 50 МБ; `app.models.predict(model_name, features)` → power_t1, power_t2, p10, p90 | mustafa | ❌ |
 | R4 | must | Ретроспектива: выпуск на 31.01, 01.02, … 27.02, каждый на 24–48 ч почасово | `backtest` → 28 файлов `outputs/forecasts/issue_YYYY-MM-DD.csv` (48 строк rev0) + `february_2026.csv` | mustafa | ❌ |
 | R5 | must | Agentic-цикл: получение погоды → подготовка → модель → почасовой прогноз → анализ → повторный расчёт при обновлении входных данных; работает без ключей | `runs/<run_id>/agent_log.jsonl` + `report.md` на каждый выпуск; в логе есть `validate_weather`, `analyze`, `recompute_if_updated` с `decision`/`reason`; хотя бы один выпуск с `fallback_used` или пересчётом | mustafa | ❌ |
 | R6 | must | README и воспроизводимость: запуск в 3 команды без ключей, macOS и Windows, тесты, smoke | чистый clone → `uv sync && uv run python -m app.cli backtest` < 5 мин; `scripts/smoke.sh` PASS | ansar | ❌ |
-| R7 | should | Метрики на отложенных периодах (январь 2026, февраль 2025) против B0/B1 | `uv run python -m app.cli evaluate --holdout 2026-01` → `outputs/metrics/holdout_2026-01.json` (`MetricsReport`), таблица в `docs/METRICS.md` | amirkhan | ❌ |
+| R7 | should | Метрики на отложенных периодах (январь 2026, февраль 2025) против B0/B1 | `uv run python -m app.cli evaluate --holdout 2026-01` → `outputs/metrics/holdout_2026-01.json` (`MetricsReport`), таблица в `docs/METRICS.md` | mustafa | ❌ |
 | R8 | should | Страница: выбор выпуска, график p50 + p10–p90 + B1, лента шагов агента, таблица метрик; API по контракту | `GET /api/issues`, `/api/forecast/{date}`, `/api/metrics`, `/api/runs/{id}/log`, `POST /api/run`; `static/index.html` | ansar | ❌ |
 | R9 | could | LLM-планировщик и сводка диспетчеру (RU) на тех же tools; реальный прогон в репо | `forecast --llm` при `LLM_API_KEY` → лог с `llm != null`; `runs/llm_demo/` закоммичен | mustafa | ❌ |
-| R10 | could | Второй источник NWP (`gfs_seamless`): разброс как неопределённость, фолбэк при провале валидации | `wx_model` в CSV, решение в логе | mustafa (агент) / ansar (загрузка) | ❌ |
+| R10 | could | Второй источник NWP (`gfs_seamless`): разброс как неопределённость, фолбэк при провале валидации | `wx_model` в CSV, решение в логе | amirkhan (загрузка, идея) / mustafa (агент) | ❌ |
 
 ## Контракт (меняет только лид)
 Код контракта: `app/schemas.py` (модели и наборы колонок) и `app/config.py` (координаты, tz, правило утечки, пути). Ниже — то же словами.
@@ -74,22 +74,24 @@
 ## Владение
 | Поток | Кто | Почему он |
 |---|---|---|
-| Контракт, агент (orchestrator/tools/log/llm_planner), интеграция, CLI, LLM-прогон | mustafa | LLM-интеграции, интеграция кусков, лид |
-| Данные и модели: `data.py`, `features.py`, `models.py`, `train.py`, `evaluate.py`, метрики | amirkhan | pandas/sklearn/LSTM — самый сильный ML в команде |
-| Погода и кэш, API-эндпоинты, страница, README, тесты, smoke, сдача | ansar | FastAPI/pandas-пайплайны, сильный README |
+| Данные, модели, хранилище, агент (orchestrator/tools/log/llm_planner), контракт, CLI | mustafa | лид; ML и LLM-интеграции; держит контракт и интеграцию |
+| Платформа: API-эндпоинты, страница (`ui-craft`), README, тесты API/CLI, smoke, `docs/TESTING.md` | ansar | FastAPI, сильный README; платформа — лицо решения для жюри |
+| Погода и кэш (R2), второй источник NWP (R10), идеи и новые фичи в `docs/IDEAS.md` → лиду | amirkhan | генерирует идеи и предлагает функции; погода — изолированный модуль с тестом, даёт коммиты в его зоне |
+
+Каждый пушит сам через `scripts/checkpoint.sh` не реже раза в 30 мин: организаторы смотрят коммиты каждого участника.
 
 Зоны — `docs/ZONES.md`, текущие задачи — `docs/tasks/mustafa.md`, `amirkhan.md`, `ansar.md`.
 
 ## План по часам
-| Checkpoint | Мустафа | Амирхан | Ансар |
+| Checkpoint | Мустафа | Ансар | Амирхан |
 |---|---|---|---|
-| 14:45 | контракт, данные, кэш, задачи запушены; `log.py`, заглушки tools | `data.py` → `hourly.parquet` | `weather.py`: кэш с day1–3 + ws10 + gfs, `select_for_issue`, тест утечки |
-| 15:15 | `orchestrator.py` на `power_curve`-моке, первый выпуск end-to-end | `power_curve` + `train` | `api/routes.py` на моках, `static/index.html` каркас |
-| 15:50 | основной сценарий end-to-end (backtest, 28 выпусков, логи, rev1) | `gbm` квантили, `evaluate` январь 2026 | README черновик, smoke зелёный |
-| 16:15 | LLM-прогон → `runs/llm_demo`; R10 | февраль 2025, `docs/METRICS.md` | страница на реальных данных, `docs/TESTING.md` |
+| 14:45 | образец выпуска в `outputs/forecasts/` и `runs/` (есть); `data.py` → `hourly.parquet` | `api/routes.py` на образце: все GET-эндпоинты | `weather.py`: кэш с day1–3 + ws10 + gfs, `select_for_issue`, тест |
+| 15:15 | `models.py` power_curve + `train`; `orchestrator.py` первый выпуск end-to-end | `static/index.html`: выпуск, график p50 + p10–p90, лента агента | `docs/IDEAS.md`: 5–7 идей с оценкой ценность/время; первая согласована с лидом |
+| 15:50 | `backtest` 28 выпусков, rev1-пересчёт, логи | README черновик, `tests/test_api.py`, smoke зелёный | R10: `gfs_seamless` в кэше, разброс моделей как поле для агента |
+| 16:15 | gbm с квантилями, `evaluate` январь 2026, `docs/METRICS.md`; LLM-прогон | страница на 28 выпусках, метрики, `docs/TESTING.md` | реализация согласованной идеи в своей зоне или в `docs/` |
 | 16:30 | ФРИЗ фич | | |
-| 16:50 | `/critics`, чистый clone macOS | чистый clone Windows | README финал, скриншот |
-| 17:40 | финальный push | | сдача на платформе (Мустафа) |
+| 16:50 | `/critics`, чистый clone macOS | README финал, скриншот, сдача на платформе (с Мустафой) | чистый clone Windows, `/critics` по README |
+| 17:40 | финальный push | | |
 
 ## Риски
 | Риск | Страховка |
