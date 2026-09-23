@@ -61,3 +61,4 @@
 - 17:03 · mustafa · Мустафа · Protect monthly export and document release audit (R4,R6) · тесты: pass
 - 17:04 · mustafa · Мустафа · platform: integration screen for the customer's IT (architecture, API, formats, on-prem deployment, pilot roadmap); per-turbine MW in chart; honest pair counts and quantile sums (R8) · тесты: pass
 - 17:06 · mustafa · Мустафа · platform: honest wording — admissible by the 7 h rule (not a proven publication time), bid-hour costs, D+2 bid is the pre-recompute version (R8) · тесты: pass
+- 17:08 · amirkhan · Амирхан · fix: reject malformed weather and unsupported forecast explanations (R2,R9) · тесты: pass

@@ -251,8 +251,9 @@ def answer_template(facts: Facts, question: str) -> tuple[str, list[str]]:
             if "wx_fields" in d:
                 fields = ", ".join(f"{k}×{v}" for k, v in sorted(d["wx_fields"].items()))
                 parts.append(
-                    f"Погода: {d['wx_model']}, каждый час — из прогона, опубликованного до момента "
-                    f"прогноза (правило day1/day2/day3: {fields})."
+                    f"Погода: {d['wx_model']}; консервативное правило доступности "
+                    f"day1/day2/day3: {fields}. Фактическое время публикации каждого "
+                    "исторического прогона этим правилом не подтверждается."
                 )
         elif name == "recompute":
             step_text("recompute_if_updated")
@@ -280,8 +281,19 @@ def answer_template(facts: Facts, question: str) -> tuple[str, list[str]]:
             "Можно спросить: пик, штиль, энергия за сутки, конкретный час (ЧЧ:ММ), коридор, "
             "погода и утечка, пересчёт, модель, шаги агента."
         )
-        sources.append("report.md")
-    return " ".join(parts), list(dict.fromkeys(sources))
+        if facts.report:
+            sources.append("report.md")
+    return _scenario_units(" ".join(parts), facts), list(dict.fromkeys(sources))
+
+
+def _scenario_units(text: str, facts: Facts) -> str:
+    """SCADA power is normalized; MW conversion is a scenario, not a measured nameplate."""
+    if "МВт" in text and not facts.rows.empty and "сценарн" not in text.lower():
+        text += (
+            f" МВт и МВт·ч рассчитаны при сценарном номинале {config.RATED_MW:g} МВт; "
+            "паспортная мощность станции в исходных данных не указана."
+        )
+    return text
 
 
 # --- grounding: every number in a text must exist in the facts ----------------------------------
@@ -375,6 +387,7 @@ def _user_prompt(facts: Facts, question: str) -> str:
         "derived": facts.derived,
         "steps": steps,
         "hourly": table,
+        "allowed_sources": sorted(allowed_sources(facts)),
     }
     return f"Вопрос: {question}\n\nФакты выпуска (JSON):\n{json.dumps(pack, ensure_ascii=False)}"
 
@@ -383,8 +396,8 @@ def answer(run_id: str, question: str) -> AskAnswer:
     """Answer a dispatcher's question about one issue from its facts; LLM trouble never raises.
 
     grounded is computed for every answer, the template's too: it says whether each number in the
-    text exists in the facts. A run with a log but no forecast rows is answered from the log only
-    and says so — never a confident summary without rows.
+    text exists in the facts. A run with a log but no forecast rows is explicitly unavailable;
+    neither a stale report nor an LLM may invent its missing forecast.
     """
     facts = load_facts(run_id)
     if facts.empty:
@@ -394,12 +407,21 @@ def answer(run_id: str, question: str) -> AskAnswer:
             grounded=True,
             sources=[],
         )
-    text, sources = answer_template(facts, question)
     if facts.rows.empty:
         text = (
-            f"По выпуску {run_id} есть журнал агента, но строк прогноза нет (issue CSV не найден), "
-            f"поэтому ответ только по журналу. {text}"
+            "По этому выпуску строк прогноза нет: актуальный issue CSV не найден. "
+            "Численные выводы из старого отчёта не подтверждены; "
+            "выберите выпуск с сохранённым прогнозом или выполните пересчёт."
         )
+        grounded, _ = is_grounded(text, facts)
+        return AskAnswer(
+            answer=text,
+            mode="demo",
+            grounded=grounded,
+            sources=[],
+            fallback_reason="forecast rows unavailable",
+        )
+    text, sources = answer_template(facts, question)
     grounded, why = is_grounded(text, facts)
     template = AskAnswer(
         answer=text,
@@ -420,19 +442,25 @@ def answer(run_id: str, question: str) -> AskAnswer:
     clean = _TAG_RE.sub("", reply.answer).strip()[:MAX_ANSWER_CHARS]
     if not clean:
         return template.model_copy(update={"fallback_reason": "empty answer"})
+    clean = _scenario_units(clean, facts)
     ok, why = is_grounded(clean, facts)
     if not ok:
         return template.model_copy(update={"fallback_reason": why})
     known = allowed_sources(facts)
     cited = [s for s in reply.sources if s in known]  # an LLM may cite what does not exist
+    if reply.sources and not cited:
+        return template.model_copy(update={"fallback_reason": "unsupported llm sources"})
     merged = list(dict.fromkeys([*cited, *sources]))
     return AskAnswer(answer=clean, mode="llm", grounded=True, sources=merged)
 
 
 def allowed_sources(facts: Facts) -> set[str]:
     """Source labels that name real facts of this run; anything else from the LLM is dropped."""
-    known = {f"log#{s.step} {s.tool}" for s in facts.steps} | {"report.md"}
-    if facts.csv_name:
-        known |= {facts.csv_name, f"{facts.csv_name} rev1"}
+    known = {f"log#{s.step} {s.tool}" for s in facts.steps}
+    if facts.report:
+        known.add("report.md")
+    if facts.csv_name and not facts.rows.empty:
+        known.add(facts.csv_name)
+        known |= {f"{facts.csv_name} rev{int(v)}" for v in facts.rows["revision"]}
         known |= {f"{facts.csv_name} lead {int(v)}" for v in facts.rows["lead_h"]}
     return known

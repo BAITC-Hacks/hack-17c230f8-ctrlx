@@ -122,12 +122,35 @@ _FETCH_ERRORS = (OSError, ValueError)
 
 
 def _check_payload(payload) -> None:
-    """Reject API errors and empty answers before anything is written to the cache."""
+    """Reject malformed responses before replacing a known-good cache."""
     items = payload if isinstance(payload, list) else [payload]
+    if not items:
+        raise ValueError("Open-Meteo returned no usable data: empty point list")
     for item in items:
-        if not isinstance(item, dict) or not item.get("hourly", {}).get("time"):
-            reason = item.get("reason", "no hourly data") if isinstance(item, dict) else item
-            raise ValueError(f"Open-Meteo returned no usable data: {reason}")
+        hourly = item.get("hourly") if isinstance(item, dict) else None
+        if not isinstance(hourly, dict):
+            raise ValueError("Open-Meteo returned no usable data: hourly must be an object")
+        times = hourly.get("time")
+        if not isinstance(times, list) or not times or not all(isinstance(t, str) for t in times):
+            raise ValueError("Open-Meteo returned no usable data: time must be a nonempty list")
+        try:
+            parsed = pd.to_datetime(times, utc=True, errors="raise")
+        except (ValueError, TypeError) as exc:
+            raise ValueError("Open-Meteo returned invalid timestamps") from exc
+        if parsed.isna().any() or parsed.has_duplicates:
+            raise ValueError("Open-Meteo returned missing or duplicate timestamps")
+        for key in API_VARS:
+            values = hourly.get(key)
+            if values is None:  # absent variables remain NaN for the older-run fallback
+                continue
+            if not isinstance(values, list) or len(values) != len(times):
+                raise ValueError(f"Open-Meteo returned misaligned hourly variable: {key}")
+            if any(
+                v is not None
+                and (isinstance(v, bool) or not isinstance(v, (int, float)) or not np.isfinite(v))
+                for v in values
+            ):
+                raise ValueError(f"Open-Meteo returned invalid numeric values: {key}")
 
 
 def _update_meta(
@@ -138,7 +161,7 @@ def _update_meta(
         meta = json.loads(meta_file.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         meta = {}
-    if "models" not in meta:  # migrate the initial single-model layout
+    if not isinstance(meta, dict) or not isinstance(meta.get("models"), dict):
         meta = {
             "source": "Open-Meteo Previous Runs API (https://open-meteo.com/en/docs/previous-runs-api)"
         }
@@ -179,6 +202,7 @@ def to_frame(payload) -> pd.DataFrame:
     grid cell, so the values coincide); wind direction is averaged on the unit circle.
     attrs: model grid cells per point and whether they are the same cell.
     """
+    _check_payload(payload)
     items = payload if isinstance(payload, list) else [payload]
     frames = [_point_frame(item) for item in items]
     df = frames[0]
@@ -218,12 +242,12 @@ def load_or_fetch(model: str = "best_match", refresh: bool = False) -> pd.DataFr
         )
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
+        df = to_frame(payload)
     except (OSError, ValueError) as exc:
         raise ValueError(
             f"weather cache {path} is unreadable ({exc}); delete it and run "
             f"load_or_fetch({model!r}, refresh=True)"
         ) from exc
-    df = to_frame(payload)
     df.attrs.update(model=model, source="cache")
     return df
 
@@ -257,6 +281,14 @@ def fetch_issue_window(issue_time_utc, model: str = "best_match", timeout: float
         }
     window = live[(live["time_utc"] >= t0) & (live["time_utc"] <= last)]
     merged = window.merge(cached, on="time_utc", suffixes=("_live", "_cache"))
+    if len(window) != config.HORIZON_H or len(merged) != config.HORIZON_H:
+        return {
+            "live": False,
+            "reason": "incomplete live/cache issue window; comparison cannot be verified",
+            "model": model,
+            "checked_at": checked_at,
+            "url": url,
+        }
     cols = WEATHER_COLUMNS[1:]
     a = merged[[f"{c}_live" for c in cols]].to_numpy(dtype=float)
     b = merged[[f"{c}_cache" for c in cols]].to_numpy(dtype=float)
@@ -283,7 +315,7 @@ def select_for_issue(
 
     ws100/ws10 use previous_dayN with N >= safe_previous_day(lead); if dayN is missing,
     an older run (N+1..3). dir100/temp2m/gust10 exist only as day2: where day2 is not yet
-    safe (lead >= 42) they are carried forward from the last safe hour.
+    safe under the configured publication delay, they are carried from the last safe hour.
     """
     t0 = pd.Timestamp(issue_time_utc)
     t0 = t0.tz_localize("UTC") if t0.tzinfo is None else t0.tz_convert("UTC")

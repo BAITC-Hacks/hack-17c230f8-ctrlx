@@ -1,5 +1,6 @@
 """R2: weather cache, offline load, leak-safe selection per issue."""
 
+import hashlib
 import json
 
 import numpy as np
@@ -28,7 +29,8 @@ def test_cache_is_committed_and_covers_test_period(model):
     assert list(df.columns) == WEATHER_COLUMNS
     assert df["time_utc"].max() >= T0_LAST + pd.Timedelta(hours=config.HORIZON_H - 1)
     meta = json.loads((config.WEATHER_CACHE / "meta.json").read_text(encoding="utf-8"))
-    assert len(meta["models"][model]["sha256"]) == 64
+    digest = hashlib.sha256(weather.cache_path(model).read_bytes()).hexdigest()
+    assert meta["models"][model]["sha256"] == digest
 
 
 def test_offline_load_does_not_fetch(monkeypatch, wx):
@@ -212,3 +214,63 @@ def test_day2_only_fields_are_not_taken_where_day2_is_unsafe():
     sel = weather.select_for_issue(wx, T0_FIRST)
     last_safe = max(lead for lead in range(config.HORIZON_H) if config.safe_previous_day(lead) <= 2)
     assert (sel.loc[sel["lead_h"] > last_safe, "temp2m"] == last_safe).all()
+
+
+def _malformed_payloads():
+    base = _payload_from(_synthetic(T0_FIRST), 43.62, 78.48)
+    yield []
+    yield {"hourly": []}
+    yield {"hourly": {"time": "not-a-list"}}
+    for times in [["bad timestamp"], ["NaT"], ["2026-02-01", "2026-02-01"]]:
+        yield {"hourly": {"time": times}}
+    key = next(iter(weather.API_VARS))
+    for values in [5.0, [1.0], [float("inf")] * config.HORIZON_H]:
+        changed = json.loads(json.dumps(base))
+        changed["hourly"][key] = values
+        yield changed
+
+
+@pytest.mark.parametrize("payload", list(_malformed_payloads()))
+def test_malformed_refresh_preserves_known_good_cache(monkeypatch, tmp_path, payload):
+    monkeypatch.setattr(config, "WEATHER_CACHE", tmp_path)
+    path = weather.cache_path("best_match")
+    good = json.dumps(_payload_from(_synthetic(T0_FIRST), 43.62, 78.48)).encode()
+    path.write_bytes(good)
+    monkeypatch.setattr(weather.urllib.request, "urlopen", lambda *a, **k: _Response(payload))
+    with pytest.raises(ValueError, match="Open-Meteo"):
+        weather.fetch_previous_runs("best_match")
+    assert path.read_bytes() == good
+    loaded = weather.load_or_fetch("best_match", refresh=True)
+    assert loaded.attrs["source"] == "cache" and len(loaded) == config.HORIZON_H
+
+
+@pytest.mark.parametrize("payload", [[], {"hourly": []}])
+def test_structurally_corrupted_cache_has_clear_error(monkeypatch, tmp_path, payload):
+    monkeypatch.setattr(config, "WEATHER_CACHE", tmp_path)
+    weather.cache_path("best_match").write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="unreadable"):
+        weather.load_or_fetch("best_match")
+
+
+def test_null_weather_values_remain_available_for_older_run_fallback():
+    payload = _payload_from(_synthetic(T0_FIRST), 43.62, 78.48)
+    payload["hourly"]["wind_speed_100m_previous_day1"][0] = None
+    frame = weather.to_frame(payload)
+    selected = weather.select_for_issue(frame, T0_FIRST)
+    assert selected.loc[0, "wx_field"] == "day2"
+    assert selected.loc[0, "ws100"] == 200.0
+
+
+def test_malformed_live_check_returns_offline_status(monkeypatch):
+    monkeypatch.setattr(weather.urllib.request, "urlopen", lambda *a, **k: _Response([]))
+    result = weather.fetch_issue_window(T0_FIRST)
+    assert result["live"] is False and "Open-Meteo" in result["reason"]
+
+
+@pytest.mark.parametrize("offset,hours", [(0, 0), (0, 12), (72, 48)])
+def test_live_check_cannot_verify_empty_or_partial_overlap(monkeypatch, offset, hours):
+    frame = _synthetic(T0_FIRST + pd.Timedelta(hours=offset)).iloc[:hours]
+    payload = _payload_from(frame, 43.62, 78.48)
+    monkeypatch.setattr(weather.urllib.request, "urlopen", lambda *a, **k: _Response(payload))
+    result = weather.fetch_issue_window(T0_FIRST)
+    assert result["live"] is False
