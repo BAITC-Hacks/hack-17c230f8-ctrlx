@@ -67,7 +67,10 @@ def replay(month: str = "2026-01") -> dict:
     rows["target"] = pd.to_datetime(rows["target_time_utc"], utc=True)
     rows["y"] = farm["p"].reindex(rows["target"]).to_numpy()
     rows = rows[(rows["target"] < period_end) & rows["y"].notna()]
-    final = rows.sort_values("revision").drop_duplicates(["t0", "target"], keep="last")
+    # what the agent actually publishes: D+1 hours take the intraday revision, D+2 hours (the
+    # day-ahead bid, filed before 08:00 — before the 12:00 recompute) stay at revision 0
+    usable = rows[(rows["revision"] == 0) | (rows["lead_h"] < 24)]
+    final = usable.sort_values("revision").drop_duplicates(["t0", "target"], keep="last")
     rev0 = rows[rows["revision"] == 0]
 
     t0s = sorted(final["t0"].unique())
@@ -92,7 +95,7 @@ def replay(month: str = "2026-01") -> dict:
             "mae": _mae(fixed["gbm"], fixed["y"]),
         },
         {
-            "variant": "D agent: checks, fallbacks, recompute at t0+12 h (published plan)",
+            "variant": "D agent, published plan: D+1 recomputed at 12:00, D+2 bid at t0",
             "mae": _mae(fixed["power_farm"], fixed["y"]),
         },
     ]

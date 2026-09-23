@@ -18,8 +18,8 @@
       "mae": 0.1535
     },
     {
-      "variant": "D agent: checks, fallbacks, recompute at t0+12 h (published plan)",
-      "mae": 0.1496
+      "variant": "D agent, published plan: D+1 recomputed at 12:00, D+2 bid at t0",
+      "mae": 0.1515
     }
   ],
   "decisions": [

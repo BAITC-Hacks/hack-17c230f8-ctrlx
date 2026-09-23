@@ -101,15 +101,17 @@ def evaluate(month: str) -> dict:
     def mae(a, b):
         return round(float(np.mean(np.abs(a - b))), 4)
 
-    plan, fact = ev["gbm"].to_numpy(), ev["y"].to_numpy()
+    # imbalance is settled against the day-ahead bid: hours 24-47 of the issue (revision 0)
+    bid = ev[ev["lead"] >= 24]
+    plan, fact = bid["gbm"].to_numpy(), bid["y"].to_numpy()
     dev = np.abs(fact - plan)
     corridor = {
         f"within_{k}pct": round(float(np.mean(dev <= k / 100 * plan)), 3) for k in (5, 20, 30)
     }
-    hours = ev["target"].nunique()
+    hours = bid["target"].nunique()
     cost = {
         name: round(
-            float(np.mean(np.abs(ev[name] - fact)))
+            float(np.mean(np.abs(bid[name] - fact)))
             * RATED_MW
             * hours
             * PENALTY_SHARE
@@ -137,11 +139,12 @@ def evaluate(month: str) -> dict:
         },
         "regulator_kpi_gbm": corridor,
         "imbalance_cost_upper_bound_mln_tg": {
-            "assumptions": f"{RATED_MW} MW, {PRICE_TG_KWH} tg/kWh, penalty {PENALTY_SHARE} x price "
+            "assumptions": f"bid hours (lead 24-47), {RATED_MW} MW, {PRICE_TG_KWH} tg/kWh, "
+            f"penalty {PENALTY_SHARE} x price "
             "for every kWh (all hours outside +-5 %), new-contract regime",
             **cost,
         },
-        "accuracy_1_minus_nmae_gbm": round(1 - float(np.mean(dev)), 3),
+        "accuracy_1_minus_nmae_gbm": round(1 - float(np.mean(np.abs(ev["gbm"] - ev["y"]))), 3),
     }
     report = MetricsReport(
         period=month,
