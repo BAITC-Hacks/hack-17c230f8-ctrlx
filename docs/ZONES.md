@@ -18,4 +18,4 @@ LEAD: mustafa
 ALL: docs/PROGRESS.md
 mustafa: app/agent/ app/schemas.py app/config.py app/service.py app/cli.py app/llm.py app/console.py app/__init__.py app/api/__init__.py app/data.py app/features.py app/models.py app/train.py app/evaluate.py app/store.py data/raw/ data/processed/ models/ outputs/ runs/ AGENTS.md CLAUDE.md docs/REQUIREMENTS.md docs/ZONES.md docs/TASK.md docs/PREPARED.md docs/METRICS.md pyproject.toml uv.lock requirements.txt .env.example Dockerfile tests/test_data.py tests/test_models.py tests/test_agent.py
 ansar: app/main.py app/api/routes.py static/ tests/test_api.py tests/test_cli.py README.md docs/TESTING.md scripts/smoke.sh
-amirkhan: app/weather.py data/weather_cache/ tests/test_weather.py docs/IDEAS.md
+amirkhan: app/weather.py app/ask.py data/weather_cache/ tests/test_weather.py tests/test_ask.py docs/IDEAS.md

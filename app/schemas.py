@@ -149,3 +149,17 @@ class IssueListItem(BaseModel):
     model_name: ModelName
     revisions: int
     fallback_used: bool
+
+
+# --- "ask the agent": grounded Q&A over one run (app/ask.py) -----------------------------------
+class AskRequest(BaseModel):
+    run_id: str
+    question: str = Field(min_length=2, max_length=500)
+
+
+class AskAnswer(BaseModel):
+    answer: str
+    mode: Literal["llm", "demo"]
+    grounded: bool = Field(description="every number in the answer exists in the run facts")
+    sources: list[str] = Field(default_factory=list, description="log steps / rows used")
+    fallback_reason: str | None = None

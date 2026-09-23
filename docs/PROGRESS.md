@@ -22,3 +22,4 @@
 - 15:29 · mustafa · Мустафа · models: switch GBM to scikit-learn HistGradientBoosting (no system libomp on macOS), drop lightgbm dependency; retrain and regenerate 28 issues (R3, R6) · тесты: pass
 - 15:31 · mustafa · Мустафа · docs: SOLUTION.md numbers from repository metrics, HistGradientBoosting, status and cut order (R3, R7) · тесты: pass
 - 15:32 · amirkhan · Амирхан · docs: add evidence-backed forecast research and audit notes (R2,R7,R10) · тесты: pass
+- 15:32 · mustafa · Мустафа · contract: ask-the-agent (AskRequest/AskAnswer), second LLM provider as fallback, JSON extraction for NIM endpoints; zone app/ask.py -> amirkhan (R9) · тесты: pass

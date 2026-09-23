@@ -253,9 +253,11 @@ def _llm_summary(facts_text: str, template: str) -> tuple[str, LlmInfo | None, s
         return template, None, "LLM не ответил — шаблонная сводка"
     allowed = set(re.findall(r"\d+(?:[.,]\d+)?", facts_text))
     extra = [n for n in re.findall(r"\d+(?:[.,]\d+)?", res.summary) if n not in allowed]
-    import os
+    from app.llm import last_provider
 
-    info = LlmInfo(provider=os.getenv("LLM_BASE_URL", "openai"), model=os.getenv("LLM_MODEL", ""))
+    used = last_provider()
+    info = LlmInfo(provider=used.get("provider", ""), model=used.get("model", ""),
+                   tokens=used.get("tokens", 0))
     if extra:
         return template, info, f"llm_rejected: числа не из фактов ({', '.join(extra[:3])})"
     return res.summary, info, "сводка LLM прошла проверку чисел"

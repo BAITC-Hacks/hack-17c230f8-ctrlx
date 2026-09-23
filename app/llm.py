@@ -30,41 +30,71 @@ def _demo_forced() -> bool:
     return os.getenv("DEMO_MODE", "auto").strip().lower() in {"1", "true"}
 
 
+def _providers() -> list[tuple[str, str, str]]:
+    """(api_key, base_url, model) in priority order: primary LLM_*, then optional LLM_FALLBACK_*.
+
+    Typical setup: NVIDIA build.nvidia.com as primary, OpenAI as fallback (or the other way round).
+    """
+    out = []
+    for prefix in ("LLM", "LLM_FALLBACK"):
+        key, model = os.getenv(f"{prefix}_API_KEY"), os.getenv(f"{prefix}_MODEL")
+        if key and model:
+            out.append((key, os.getenv(f"{prefix}_BASE_URL", DEFAULT_BASE_URL), model))
+    return out
+
+
 def llm_mode() -> Literal["llm", "demo"]:
     if _demo_forced():
         return "demo"
-    if os.getenv("LLM_API_KEY") and os.getenv("LLM_MODEL"):
-        return "llm"
-    return "demo"
+    return "llm" if _providers() else "demo"
+
+
+def last_provider() -> dict:
+    """Which provider answered the last successful call (for the agent log)."""
+    return dict(_LAST)
+
+
+_LAST: dict = {}
+
+
+def _extract_json(content: str) -> dict:
+    """Some OpenAI-compatible endpoints wrap JSON in prose or code fences."""
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        start, end = content.find("{"), content.rfind("}")
+        if start < 0 or end <= start:
+            raise
+        return json.loads(content[start : end + 1])
 
 
 def complete_json[ModelT: BaseModel](
     model_cls: type[ModelT], system: str, user: str
 ) -> ModelT | None:
-    """Call the LLM and validate its JSON reply against model_cls, or return None."""
-    api_key = os.getenv("LLM_API_KEY")
-    model = os.getenv("LLM_MODEL")
-    if not api_key or not model:
-        logger.warning("complete_json: missing LLM_API_KEY or LLM_MODEL")
+    """Call the LLM(s) and validate the JSON reply against model_cls, or return None."""
+    providers = [] if _demo_forced() else _providers()
+    if not providers:
+        logger.warning("complete_json: no LLM provider configured")
         return None
-
-    base_url = os.getenv("LLM_BASE_URL", DEFAULT_BASE_URL)
-    client = OpenAI(api_key=api_key, base_url=base_url, timeout=20, max_retries=1)
-
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            response_format={"type": "json_object"},
-        )
-        content = response.choices[0].message.content
-        if not content:
-            raise ValueError("empty completion content")
-        data = json.loads(content)
-        return model_cls.model_validate(data)
-    except Exception as exc:  # any failure -> caller falls back to rule-based
-        logger.warning("complete_json failed: %s", type(exc).__name__)
-        return None
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+    for api_key, base_url, model in providers:
+        client = OpenAI(api_key=api_key, base_url=base_url, timeout=30, max_retries=1)
+        for fmt in ({"type": "json_object"}, None):  # not every endpoint supports json mode
+            try:
+                kwargs = {"model": model, "messages": messages}
+                if fmt:
+                    kwargs["response_format"] = fmt
+                response = client.chat.completions.create(**kwargs)
+                content = response.choices[0].message.content
+                if not content:
+                    raise ValueError("empty completion content")
+                result = model_cls.model_validate(_extract_json(content))
+                usage = getattr(response, "usage", None)
+                _LAST.clear()
+                _LAST.update(
+                    provider=base_url, model=model, tokens=getattr(usage, "total_tokens", 0) or 0
+                )
+                return result
+            except Exception as exc:  # any failure -> next attempt / provider / template
+                logger.warning("complete_json failed (%s): %s", model, type(exc).__name__)
+    return None
