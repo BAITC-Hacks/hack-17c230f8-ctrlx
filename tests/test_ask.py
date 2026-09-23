@@ -8,8 +8,10 @@ from app.schemas import AskRequest
 
 
 def _committed_run() -> str:
+    """A run with both a log and forecast rows (after a retrain, stale runs may lack the CSV)."""
     for path in sorted(config.RUNS_DIR.iterdir()):
-        if (path / "agent_log.jsonl").exists() and not ask.load_facts(path.name).empty:
+        facts = ask.load_facts(path.name)
+        if facts.steps and not facts.rows.empty:
             return path.name
     pytest.skip("no committed run with a log and forecast rows")
 
@@ -82,6 +84,23 @@ def test_llm_answer_with_fact_numbers_is_accepted(monkeypatch, run_id):
     assert "log#5 run_model" in result.sources
 
 
+def test_llm_sources_are_checked_against_the_facts(monkeypatch, run_id):
+    facts = ask.load_facts(run_id)
+    text = f"Пик {facts.derived['peak']['pct']} номинала."
+    monkeypatch.setattr(ask.llm, "llm_mode", lambda: "llm")
+    monkeypatch.setattr(
+        ask.llm,
+        "complete_json",
+        lambda *a, **k: ask._LlmReply(
+            answer=text, sources=["log#5 run_model", "wikipedia", "log#99 oracle"]
+        ),
+    )
+    result = ask.answer(run_id, "Какой пик?")
+    assert result.mode == "llm"
+    assert "log#5 run_model" in result.sources
+    assert "wikipedia" not in result.sources and "log#99 oracle" not in result.sources
+
+
 def test_llm_failure_falls_back_to_template(monkeypatch, run_id):
     monkeypatch.setattr(ask.llm, "llm_mode", lambda: "llm")
     monkeypatch.setattr(ask.llm, "complete_json", lambda *a, **k: None)
@@ -89,6 +108,63 @@ def test_llm_failure_falls_back_to_template(monkeypatch, run_id):
     assert result.mode == "demo" and result.fallback_reason == "llm unavailable"
     monkeypatch.setattr(ask.llm, "complete_json", lambda *a, **k: (_ for _ in ()).throw(OSError()))
     assert ask.answer(run_id, "Какой пик?").fallback_reason == "llm unavailable"
+
+
+def test_run_id_cannot_escape_the_runs_directory():
+    for bad in ("../../pyproject.toml", "..\\..\\x", "runs/../x", "/etc/passwd", ""):
+        result = ask.answer(bad, "Какой пик?")
+        assert "не найден" in result.answer and result.sources == []
+
+
+def test_number_extraction_handles_digit_groups_and_formats():
+    assert ask.numbers_in("1 000 МВт·ч, 24 %, 0,24, 6.30 м/с, 13:00") == {
+        "1000",
+        "24",
+        "0.24",
+        "6.3",
+        "13",
+        "0",
+    }
+
+
+def test_llm_markup_is_stripped_before_grounding(monkeypatch, run_id):
+    facts = ask.load_facts(run_id)
+    pct = facts.derived["peak"]["pct"]
+    monkeypatch.setattr(ask.llm, "llm_mode", lambda: "llm")
+    monkeypatch.setattr(
+        ask.llm,
+        "complete_json",
+        lambda *a, **k: ask._LlmReply(answer=f"<b>Пик {pct}</b><script>x()</script>", sources=[]),
+    )
+    result = ask.answer(run_id, "Какой пик?")
+    assert result.mode == "llm" and "<" not in result.answer and pct in result.answer
+
+
+def test_run_with_log_but_no_rows_is_answered_from_the_log_only(monkeypatch, tmp_path):
+    from datetime import UTC, datetime
+
+    from app.agent.log import RunLog
+
+    monkeypatch.setattr(config, "RUNS_DIR", tmp_path)
+    monkeypatch.setattr(config, "OUTPUTS_FORECASTS", tmp_path)  # no issue csv at all
+    log = RunLog("20260301T0000-stale", datetime(2026, 2, 28, 19, tzinfo=UTC), base_dir=tmp_path)
+    log.step("plan", "ok", "Выпуск за 28 февраля", decision="facts_complete", reason="факт есть")
+    result = ask.answer("20260301T0000-stale", "Какой пик?")
+    assert result.mode == "demo" and "строк прогноза нет" in result.answer
+    assert (
+        result.grounded and ask.is_grounded(result.answer, ask.load_facts("20260301T0000-stale"))[0]
+    )
+
+
+def test_template_grounded_flag_is_computed_not_assumed(monkeypatch, run_id):
+    facts = ask.load_facts(run_id)
+    monkeypatch.setattr(
+        ask, "answer_template", lambda f, q: ("Пик 99.97 % номинала.", ["report.md"])
+    )
+    result = ask.answer(run_id, "Какой пик?")
+    assert result.mode == "demo" and result.grounded is False
+    assert result.fallback_reason.startswith("ungrounded number")
+    assert ask.is_grounded("Пик 99.97 %", facts)[0] is False
 
 
 def test_request_contract_rejects_one_letter_questions():

@@ -4,7 +4,12 @@ Facts of a run: runs/<run_id>/agent_log.jsonl (RunLog.read), the rows of outputs
 that carry this run_id (all revisions) and runs/<run_id>/report.md. Without an LLM key a template
 answers (mode "demo"). With a key the LLM writes the text, and every number in it must already exist
 in the facts (SOLUTION 8.5: the LLM explains, it never computes); otherwise the template answers and
-the reason is recorded in fallback_reason.
+the reason is recorded in fallback_reason. Sources cited by the LLM are kept only if they name real
+facts (a logged step, the issue CSV, report.md).
+
+Honest limit: the number check blocks invented numbers, it does not prove the sentence around a
+number is right (a real number can be attached to a wrong claim). That is why the template answer
+is the reference and the LLM text is an optional explanation on top of the same facts.
 
 Example questions: «Какой пик завтра?», «Что в 14:00 2 февраля?», «Откуда погода и нет ли утечки?»,
 «Что изменилось после пересчёта?», «Насколько можно верить коридору?», «Что делал агент?».
@@ -32,6 +37,12 @@ SYSTEM_PROMPT = (
 _HOUR_RE = re.compile(r"\b(\d{1,2}):(\d{2})\b")
 _DAY_RE = re.compile(r"\b(\d{1,2})\s*(?:февраля|января|марта|\.0[1-3])")
 _NUM_RE = re.compile(r"(?<![\w.])[-+]?\d+(?:[.,]\d+)?")
+# digit groups split by a space / thin space / apostrophe ("1 000") must not pass as "1" and "000"
+_GROUP_RE = re.compile(r"(?<=\d)[   '](?=\d{3}\b)")
+# run_id is used to build file paths: only the safe alphabet, no separators, no ".."
+_RUN_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
+_TAG_RE = re.compile(r"<[^>]*>")
+MAX_ANSWER_CHARS = 1500
 
 _INTENTS: list[tuple[str, tuple[str, ...]]] = [
     ("peak", ("пик", "максим", "больше всего", "самый сильн", "шың", "ең жоғары")),
@@ -67,6 +78,8 @@ def load_facts(
 ) -> Facts:
     runs_dir = runs_dir or config.RUNS_DIR
     forecasts_dir = forecasts_dir or config.OUTPUTS_FORECASTS
+    if not _RUN_ID_RE.fullmatch(run_id) or ".." in run_id:  # never touch paths outside runs/
+        return Facts(run_id, [], pd.DataFrame(), "", None)
     steps = RunLog.read(run_id, runs_dir)
     report_path = runs_dir / run_id / "report.md"
     report = report_path.read_text(encoding="utf-8") if report_path.exists() else ""
@@ -264,7 +277,7 @@ def answer_template(facts: Facts, question: str) -> tuple[str, list[str]]:
         lines = [ln.lstrip("- ").strip() for ln in facts.report.splitlines() if ln.strip()]
         parts.append(" ".join(lines[:4]) if lines else "По этому выпуску есть только журнал шагов.")
         parts.append(
-            "Можно спросить: пик, штиль, энергия за сутки, конкретный час (14:00), коридор, "
+            "Можно спросить: пик, штиль, энергия за сутки, конкретный час (ЧЧ:ММ), коридор, "
             "погода и утечка, пересчёт, модель, шаги агента."
         )
         sources.append("report.md")
@@ -273,19 +286,23 @@ def answer_template(facts: Facts, question: str) -> tuple[str, list[str]]:
 
 # --- grounding: every number in a text must exist in the facts ----------------------------------
 def _norm(num: str) -> str:
+    """Canonical spelling: '0,24' -> '0.24', '6.30' -> '6.3', '00' -> '0', '+5' -> '5'."""
     s = num.replace(",", ".").lstrip("+")
-    if "." in s:
-        s = s.rstrip("0").rstrip(".")
-    return s or "0"
+    sign = "-" if s.startswith("-") else ""
+    whole, _, frac = s.lstrip("-").partition(".")
+    whole = whole.lstrip("0") or "0"
+    frac = frac.rstrip("0")
+    value = f"{whole}.{frac}" if frac else whole
+    return value if value == "0" else sign + value
 
 
 def numbers_in(text: str) -> set[str]:
-    return {_norm(m) for m in _NUM_RE.findall(text)}
+    return {_norm(m) for m in _NUM_RE.findall(_GROUP_RE.sub("", text))}
 
 
 def allowed_numbers(facts: Facts) -> set[str]:
     allowed: set[str] = set()
-    for text in [facts.report, json.dumps(facts.derived, ensure_ascii=False)]:
+    for text in [facts.run_id, facts.report, json.dumps(facts.derived, ensure_ascii=False)]:
         allowed |= numbers_in(text)
     for s in facts.steps:
         allowed |= numbers_in(" ".join(filter(None, [s.summary, s.decision, s.reason])))
@@ -363,7 +380,12 @@ def _user_prompt(facts: Facts, question: str) -> str:
 
 
 def answer(run_id: str, question: str) -> AskAnswer:
-    """Answer a dispatcher's question about one issue from its facts; LLM trouble never raises."""
+    """Answer a dispatcher's question about one issue from its facts; LLM trouble never raises.
+
+    grounded is computed for every answer, the template's too: it says whether each number in the
+    text exists in the facts. A run with a log but no forecast rows is answered from the log only
+    and says so — never a confident summary without rows.
+    """
     facts = load_facts(run_id)
     if facts.empty:
         return AskAnswer(
@@ -373,24 +395,44 @@ def answer(run_id: str, question: str) -> AskAnswer:
             sources=[],
         )
     text, sources = answer_template(facts, question)
+    if facts.rows.empty:
+        text = (
+            f"По выпуску {run_id} есть журнал агента, но строк прогноза нет (issue CSV не найден), "
+            f"поэтому ответ только по журналу. {text}"
+        )
+    grounded, why = is_grounded(text, facts)
+    template = AskAnswer(
+        answer=text,
+        mode="demo",
+        grounded=grounded,
+        sources=sources,
+        fallback_reason=None if grounded else why,
+    )
     if llm.llm_mode() == "demo":
-        return AskAnswer(answer=text, mode="demo", grounded=True, sources=sources)
+        return template
     try:
         reply = llm.complete_json(_LlmReply, SYSTEM_PROMPT, _user_prompt(facts, question))
     except Exception:  # the LLM path must never break the answer
         reply = None
     if reply is None:
-        return AskAnswer(
-            answer=text,
-            mode="demo",
-            grounded=True,
-            sources=sources,
-            fallback_reason="llm unavailable",
-        )
-    ok, why = is_grounded(reply.answer, facts)
+        return template.model_copy(update={"fallback_reason": "llm unavailable"})
+    # plain text only: the page must never render markup that came out of a model
+    clean = _TAG_RE.sub("", reply.answer).strip()[:MAX_ANSWER_CHARS]
+    if not clean:
+        return template.model_copy(update={"fallback_reason": "empty answer"})
+    ok, why = is_grounded(clean, facts)
     if not ok:
-        return AskAnswer(
-            answer=text, mode="demo", grounded=True, sources=sources, fallback_reason=why
-        )
-    merged = list(dict.fromkeys([*reply.sources, *sources]))
-    return AskAnswer(answer=reply.answer, mode="llm", grounded=True, sources=merged)
+        return template.model_copy(update={"fallback_reason": why})
+    known = allowed_sources(facts)
+    cited = [s for s in reply.sources if s in known]  # an LLM may cite what does not exist
+    merged = list(dict.fromkeys([*cited, *sources]))
+    return AskAnswer(answer=clean, mode="llm", grounded=True, sources=merged)
+
+
+def allowed_sources(facts: Facts) -> set[str]:
+    """Source labels that name real facts of this run; anything else from the LLM is dropped."""
+    known = {f"log#{s.step} {s.tool}" for s in facts.steps} | {"report.md"}
+    if facts.csv_name:
+        known |= {facts.csv_name, f"{facts.csv_name} rev1"}
+        known |= {f"{facts.csv_name} lead {int(v)}" for v in facts.rows["lead_h"]}
+    return known

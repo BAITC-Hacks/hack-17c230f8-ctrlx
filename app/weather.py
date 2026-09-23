@@ -9,6 +9,7 @@ never a fresher one, so nothing from after t0 leaks into the forecast.
 import hashlib
 import json
 import os
+import re
 import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
@@ -35,8 +36,18 @@ API_VARS = {
 AUX = {"dir100": "dir100_d2", "temp2m": "temp2m_d2", "gust10": "gust10_d2"}
 
 
+_MODEL_RE = re.compile(r"[a-z0-9_]+")
+
+
+def _check_model(model: str) -> str:
+    """The model name becomes a file name and a URL parameter: Open-Meteo ids only."""
+    if not _MODEL_RE.fullmatch(model):
+        raise ValueError(f"unexpected weather model name: {model!r}")
+    return model
+
+
 def cache_path(model: str):
-    return config.WEATHER_CACHE / f"prev_runs_{model}.json"
+    return config.WEATHER_CACHE / f"prev_runs_{_check_model(model)}.json"
 
 
 def turbine_points() -> list[tuple[float, float]]:
@@ -52,6 +63,7 @@ def build_url(
 ) -> str:
     """One request for all points: Open-Meteo answers with a JSON list, one object per point."""
     pts = points or turbine_points()
+    _check_model(model)
     params = {
         "latitude": ",".join(f"{lat:.6f}" for lat, _ in pts),
         "longitude": ",".join(f"{lon:.6f}" for _, lon in pts),

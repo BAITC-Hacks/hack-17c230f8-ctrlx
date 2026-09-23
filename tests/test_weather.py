@@ -118,6 +118,14 @@ class _Response:
         return False
 
 
+@pytest.mark.parametrize("bad", ["../x", "best match", "gfs;rm", "BEST_MATCH", ""])
+def test_model_name_is_validated_before_paths_and_urls(bad):
+    with pytest.raises(ValueError, match="model name"):
+        weather.cache_path(bad)
+    with pytest.raises(ValueError, match="model name"):
+        weather.build_url(bad)
+
+
 def test_request_goes_by_both_turbine_coordinates():
     url = weather.build_url("best_match")
     assert "latitude=43.645150,43.643198" in url and "longitude=78.535604,78.538828" in url
