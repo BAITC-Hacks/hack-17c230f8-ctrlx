@@ -57,6 +57,7 @@ class WindCastModel:
     climatology: pd.Series  # (month, local hour) -> mean farm power
     ws_train_max: float
     meta: dict = field(default_factory=dict)
+    quantile_curves: dict | None = None  # fitted before calibration; old pickles use curves["p"]
 
     def features(self, frame: pd.DataFrame) -> pd.DataFrame:
         return add_features(frame, self.curves["p"])
@@ -69,8 +70,14 @@ class WindCastModel:
         if model_name == "gbm":
             for key, col in (("p", "power_farm"), ("p1", "power_t1"), ("p2", "power_t2")):
                 out[col] = np.clip(self.gbm[key].predict(x[FEATURES]), 0, 1)
-            lo = self.gbm["q10"].predict(x[FEATURES]) - self.cqr_qhat
-            hi = self.gbm["q90"].predict(x[FEATURES]) + self.cqr_qhat
+            # R7: use the same pre-calibration feature transform as quantile training.
+            # getattr preserves compatibility with the submitted pre-fix model artifact.
+            qcurves = getattr(self, "quantile_curves", None)
+            qx = add_features(frame, qcurves) if qcurves is not None else x
+            q10 = self.gbm["q10"].predict(qx[FEATURES])
+            q90 = self.gbm["q90"].predict(qx[FEATURES])
+            lo = np.minimum(q10, q90) - self.cqr_qhat
+            hi = np.maximum(q10, q90) + self.cqr_qhat
         elif model_name == "power_curve":
             for key, col in (("p", "power_farm"), ("p1", "power_t1"), ("p2", "power_t2")):
                 pred = np.full(len(x), np.nan)

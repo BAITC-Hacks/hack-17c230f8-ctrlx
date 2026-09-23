@@ -50,3 +50,4 @@
 - 16:19 · mustafa · Мустафа · live-check example regenerated on the current model: live_match on 48 h (R2) · тесты: pass
 - 16:21 · mustafa · Мустафа · agent refuses issues inside the model's training period (leak guard) + test; API answers 422 with the reason (R5, R8) · тесты: pass
 - 16:29 · mustafa · Мустафа · fix: ablation scores the plan the agent actually publishes (D+2 bid stays at rev0); imbalance cost and corridors on bid hours; honest validation wording; README/SOLUTION numbers (R7) · тесты: pass
+- 16:29 · mustafa · Мустафа · Add bounded tool supervisor and isolate CQR calibration (R1,R3,R7,R9) · тесты: pass

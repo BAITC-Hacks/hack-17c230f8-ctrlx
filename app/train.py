@@ -19,6 +19,15 @@ from app.models import COVERAGE, CQR_DAYS, WindCastModel, fit_curves, fit_gbm
 TARGETS = ("p", "p1", "p2")
 
 
+def conformal_offset(scores: np.ndarray) -> float:
+    """R7 — finite-sample CQR order statistic (without quantile interpolation)."""
+    scores = np.asarray(scores, dtype=float)
+    if not len(scores) or not np.isfinite(scores).all():
+        raise ValueError("CQR calibration requires finite, non-empty scores")
+    rank = min(len(scores), int(np.ceil((len(scores) + 1) * COVERAGE)))
+    return float(np.partition(scores, rank - 1)[rank - 1])
+
+
 def training_frame(wx: pd.DataFrame, farm: pd.DataFrame, curves: dict, train_end: pd.Timestamp):
     first = issue_time_utc(TRAIN_START)
     t0s = [t for t in pd.date_range(first, train_end, freq="D", tz="UTC") if t < train_end]
@@ -45,13 +54,19 @@ def train(train_end: pd.Timestamp, wx: pd.DataFrame | None = None, farm=None) ->
         rows = x[x[t].notna()]
         gbm[t] = fit_gbm(rows, rows[t], "regression_l1")
 
-    # conformalised quantiles: fit on all but the last CQR_DAYS, calibrate on them
+    # R7: calibration labels must not train even the power-curve feature. Keep the
+    # point models above fitted on all available history, but fit quantiles with
+    # separate curves and exclude every target in the calibration period.
     farm_rows = x[x["p"].notna()]
     cal_start = train_end - pd.Timedelta(days=CQR_DAYS)
+    quantile_curves = fit_curves(hist[hist.index < cal_start], "p")
+    quantile_rows = add_features(farm_rows, quantile_curves)
     fit_rows, cal_rows = (
-        farm_rows[farm_rows["t0"] < cal_start],
-        farm_rows[farm_rows["t0"] >= cal_start],
+        quantile_rows[quantile_rows["target"] < cal_start],
+        quantile_rows[quantile_rows["t0"] >= cal_start],
     )
+    if fit_rows.empty or cal_rows.empty:
+        raise ValueError("CQR requires both training and later calibration periods")
     gbm["q10"] = fit_gbm(fit_rows, fit_rows["p"], "quantile", 0.1)
     gbm["q90"] = fit_gbm(fit_rows, fit_rows["p"], "quantile", 0.9)
     lo = gbm["q10"].predict(cal_rows[FEATURES])
@@ -59,7 +74,7 @@ def train(train_end: pd.Timestamp, wx: pd.DataFrame | None = None, farm=None) ->
     y = cal_rows["p"].to_numpy()
     score = np.maximum(np.minimum(lo, hi) - y, y - np.maximum(lo, hi))
     n = len(score)
-    qhat = float(np.quantile(score, min(1.0, np.ceil((n + 1) * COVERAGE) / n)))
+    qhat = conformal_offset(score)
 
     res = (farm_rows["p"] - farm_rows["pc"]).dropna()
     local = farm.index[farm.index < train_end].tz_convert(LOCAL_TZ)
@@ -68,6 +83,7 @@ def train(train_end: pd.Timestamp, wx: pd.DataFrame | None = None, farm=None) ->
         train_end=train_end,
         curves=curves,
         gbm=gbm,
+        quantile_curves=quantile_curves,
         cqr_qhat=qhat,
         climatology=clim,
         ws_train_max=float(x["ws100"].max()),
@@ -75,6 +91,10 @@ def train(train_end: pd.Timestamp, wx: pd.DataFrame | None = None, farm=None) ->
             "rows": int(len(farm_rows)),
             "issues": int(farm_rows["t0"].nunique()),
             "cal_rows": int(n),
+            "cal_start": cal_start.isoformat(),
+            "quantile_fit_target_end": fit_rows["target"].max().isoformat(),
+            "cal_target_start": cal_rows["target"].min().isoformat(),
+            "cqr_split": "target-purged; feature curves fit before calibration",
             "pc_residual_q": (float(res.quantile(0.1)), float(res.quantile(0.9))),
             "features": FEATURES,
             "created_at": datetime.now(UTC).isoformat(timespec="seconds"),

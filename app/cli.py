@@ -26,6 +26,7 @@ def _parser() -> argparse.ArgumentParser:
     f.add_argument("--issue", type=date.fromisoformat, required=True, help="observation day D")
     f.add_argument("--refresh", action="store_true", help="call Open-Meteo instead of the cache")
     f.add_argument("--llm", action="store_true", help="LLM dispatcher summary (needs LLM_API_KEY)")
+    f.add_argument("--supervise", action="store_true", help="R9: bounded LLM tool supervisor")
     f.add_argument(
         "--demo-dir", type=Path, default=None, help="write outputs here, e.g. runs/llm_demo"
     )
@@ -56,6 +57,13 @@ def main(argv: list[str]) -> int:
             from app.service import forecast
 
             issue = forecast(args.issue, refresh=args.refresh, llm=args.llm, demo_dir=args.demo_dir)
+            if args.supervise:
+                from app.agent.planner import supervise
+                from app.config import RUNS_DIR
+
+                base = args.demo_dir / "runs" if args.demo_dir else RUNS_DIR
+                decision = supervise(issue, base / issue.run_id)
+                print(f"supervisor={decision['mode']} disposition={decision['disposition']}")
             print(issue.summary)
             print(f"\nrun_id={issue.run_id} rows={len(issue.rows)} warnings={len(issue.warnings)}")
         elif args.cmd == "backtest":

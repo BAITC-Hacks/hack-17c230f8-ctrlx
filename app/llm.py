@@ -7,6 +7,7 @@ such as NVIDIA's (https://integrate.api.nvidia.com/v1) work too.
 import json
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Literal
 
@@ -52,6 +53,38 @@ def llm_mode() -> Literal["llm", "demo"]:
 def last_provider() -> dict:
     """Which provider answered the last successful call (for the agent log)."""
     return dict(_LAST)
+
+
+def tool_completion(messages: list[dict], specs: list[dict], timeout: float = 8) -> dict | None:
+    """One R9 round: shared provider timeout, no retries, at most 600 output tokens."""
+    if llm_mode() == "demo" or timeout <= 0:
+        return None
+    deadline = time.monotonic() + min(timeout, 8.0)
+    for attempt, (api_key, base_url, model) in enumerate(_providers(), start=1):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        try:
+            with OpenAI(api_key=api_key, base_url=base_url, timeout=remaining, max_retries=0) as c:
+                result = c.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    tools=specs,
+                    tool_choice="required",
+                    max_tokens=600,
+                )
+            return {
+                "message": result.choices[0].message.model_dump(exclude_none=True),
+                "provider": base_url,
+                "model": model,
+                "tokens": getattr(result.usage, "total_tokens", 0) or 0,
+                "input_tokens": getattr(result.usage, "prompt_tokens", 0) or 0,
+                "output_tokens": getattr(result.usage, "completion_tokens", 0) or 0,
+                "provider_attempts": attempt,
+            }
+        except Exception as exc:
+            logger.warning("tool_completion failed: %s", type(exc).__name__)
+    return None
 
 
 _LAST: dict = {}

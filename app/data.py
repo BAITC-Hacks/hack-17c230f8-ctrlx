@@ -63,7 +63,11 @@ def build_hourly(save: bool = True) -> pd.DataFrame:
 
 
 def farm_hourly(hourly: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Wide hourly table by time_utc: p1, p2, p (farm = mean of available turbines), temp."""
+    """R1: p is the equal-capacity farm mean, known only when both turbines are observed.
+
+    Missing SCADA is not zero generation and one turbine is not a farm-level label.
+    Its available observation is still retained for the per-turbine model.
+    """
     if hourly is None:
         hourly = pd.read_parquet(HOURLY_PATH) if HOURLY_PATH.exists() else build_hourly()
     w = hourly.pivot(index="time_utc", columns="turbine", values=["power", "ws", "temp"])
@@ -71,6 +75,6 @@ def farm_hourly(hourly: pd.DataFrame | None = None) -> pd.DataFrame:
     for tid in TURBINES:
         out[f"p{tid}"] = w[("power", tid)]
         out[f"ws{tid}"] = w[("ws", tid)]
-    out["p"] = out[[f"p{t}" for t in TURBINES]].mean(axis=1)
+    out["p"] = out[[f"p{t}" for t in TURBINES]].mean(axis=1, skipna=False)
     out["temp"] = w["temp"].mean(axis=1)
     return out
