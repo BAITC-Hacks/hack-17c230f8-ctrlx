@@ -120,7 +120,13 @@ def list_issues() -> list[IssueListItem]:
             issue_date = date.fromisoformat(path.stem[len(ISSUE_PREFIX) :])
         except ValueError:
             continue  # not an issue file (e.g. february_2026.csv)
-        rows = _read_rows(path)
+        # One unreadable file must not hide every other issue: the list is what the page needs
+        # to render at all. GET /forecast/{date} for that same date still answers with the error.
+        try:
+            rows = _read_rows(path)
+        except HTTPException:
+            log.warning("%s пропущен в списке выпусков: файл не читается", path.name)
+            continue
         if not rows:
             continue
         head = _latest(rows)

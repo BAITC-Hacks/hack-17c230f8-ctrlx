@@ -584,8 +584,22 @@ async function loadIssue() {
     draw(); renderStats(); renderLegend(); renderSummary(issue);
     renderTrace(await api(`/runs/${issue.run_id}/log`).catch(() => []));
   } catch (e) {
-    $("stats").innerHTML = `<p class="err">не удалось загрузить выпуск: ${e.message}</p>`;
+    // A failed load must leave nothing of the previous issue on screen: the selector already
+    // shows the new date, so a stale chart or trace would read as this issue's real numbers.
+    clearIssue(`не удалось загрузить выпуск ${it.issue_date}: ${esc(e.message)}`);
   }
+}
+
+function clearIssue(message) {
+  rows = [];
+  superseded = [];
+  draw();
+  $("issue-meta").innerHTML = "";
+  $("stats").innerHTML = `<p class="err">${message}</p>`;
+  $("legend").innerHTML = "";
+  $("trace").innerHTML = `<li class="empty">—</li>`;
+  $("summary").innerHTML = `<p class="empty">—</p>`;
+  $("warnings").innerHTML = "";
 }
 
 (async () => {

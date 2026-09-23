@@ -132,3 +132,22 @@ def test_page_escapes_api_text_before_innerhtml():
     assert "const esc = (s) =>" in page, "экранирование удалено из страницы"
     for sink in ("esc(s.summary)", "esc(s.decision)", "esc(w)", "esc(l.replace"):
         assert sink in page, f"текст из API попадает в innerHTML без esc(): {sink}"
+
+
+def test_issues_skips_an_unreadable_file_instead_of_failing(monkeypatch, tmp_path):
+    """One corrupt forecast file must not hide every other issue: the page needs the list."""
+    from app.api import routes
+
+    good = tmp_path / "issue_2026-01-31.csv"
+    good.write_text(
+        (routes.OUTPUTS_FORECASTS / "issue_2026-01-31.csv").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    broken = tmp_path / "issue_2026-02-01.csv"
+    broken.write_text("issue_time_utc,lead_h\nбитая,999\n", encoding="utf-8")
+    monkeypatch.setattr(routes, "OUTPUTS_FORECASTS", tmp_path)
+
+    response = client.get("/api/issues")
+    assert response.status_code == 200
+    dates = [i["issue_date"] for i in response.json()]
+    assert dates == ["2026-01-31"], f"ожидался только читаемый выпуск, получено {dates}"
