@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Team policy: a commit carries only its human author. Strip AI co-author trailers and "generated with" footers
+# no matter which tool wrote the message (Claude Code, Codex, Copilot, Cursor, …).
+msg="$1"
+perl -i -ne '
+  next if /^\s*co-authored-by:.*\b(claude|anthropic|codex|openai|chatgpt|copilot|cursor|gemini|devin|aider|windsurf|cody)\b/i;
+  next if /^\s*claude-session:/i;
+  next if /generated (with|by)\b.*\b(claude|codex|chatgpt|copilot|cursor|gemini)\b/i;
+  print;
+' "$msg"
+perl -0pi -e 's/\s+\z/\n/' "$msg"
+exit 0

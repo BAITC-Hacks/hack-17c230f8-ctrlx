@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+root="$(git rev-parse --show-toplevel)"
+"$root/scripts/secret-scan.sh" --staged && "$root/scripts/zones.sh"

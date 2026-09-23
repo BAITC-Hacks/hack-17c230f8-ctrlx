@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.sh text eol=lf
+# every teammate appends to the progress log; union keeps all lines instead of conflicting
+docs/PROGRESS.md merge=union

@@ -1,0 +1,7 @@
+# Project-level Codex settings for the whole team — loaded after you choose "Trust" for this folder.
+# Only what the shared workflow needs; model and approvals stay personal.
+# no AI co-author trailers or "Generated with" footers in commits and PRs
+commit_attribution = ""
+[sandbox_workspace_write]
+# pnpm/uv installs, curl to the local dev server, git pull/push from scripts/checkpoint.sh
+network_access = true

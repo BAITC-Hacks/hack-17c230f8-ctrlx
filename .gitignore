@@ -1,0 +1,31 @@
+# deps / builds
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+.vercel/
+*.tsbuildinfo
+next-env.d.ts
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.jks
+
+# local tooling
+.claude/settings.local.json
+.claude/worktrees/
+.playwright-mcp/
+.DS_Store
+*.log
