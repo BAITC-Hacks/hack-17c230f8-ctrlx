@@ -471,8 +471,8 @@ def run_issue(
         recompute = {
             "recomputed": True,
             "changed_hours": changed,
-            "mean_delta": round(float(delta.mean()), 3),
-            "max_delta": round(float(delta.max()), 3),
+            "mean_delta": float(delta.mean()),
+            "max_delta": float(delta.max()),
             "max_at": _when(pred1["target"].iloc[i]),
             "material": bool(material),
             "admissible": val1["admissible"],
@@ -516,7 +516,9 @@ def run_issue(
         started=s,
         decision="drift: рекомендовано переобучение"
         if ref.get("drift")
-        else ("frozen" if ref.get("frozen") else "ok"),
+        else (
+            "frozen" if ref.get("frozen") else ("ok" if ref.get("mae") is not None else "no_facts")
+        ),
         reason=(
             "в тестовом периоде новых наблюдений нет: прогноз не корректируется "
             "молча, рефлексия включится, когда придёт факт"
@@ -525,7 +527,11 @@ def run_issue(
         else (
             "смещение значимо: предлагаем переобучение, модель сами не меняем"
             if ref.get("drift")
-            else "смещение статистически незначимо"
+            else (
+                "смещение статистически незначимо"
+                if ref.get("mae") is not None
+                else "нет прошлых выпусков агента с известным фактом — самопроверка пропущена"
+            )
         ),
     )
 

@@ -24,7 +24,7 @@
   ],
   "decisions": [
     {
-      "decision": "main model vs fallback model (C vs B): the agent kept boosting in all issues",
+      "decision": "main model vs fallback model (C vs B): boosting kept in every issue",
       "fired": 31,
       "mean_delta_mae": -0.0398,
       "ci95": [

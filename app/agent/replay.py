@@ -119,7 +119,7 @@ def replay(month: str = "2026-01") -> dict:
     switched = [s for s in steps if s.tool == "validate_weather" and s.decision != "proceed"]
     ledger = [
         {
-            "decision": "main model vs fallback model (C vs B): the agent kept boosting in all issues",
+            "decision": "main model vs fallback model (C vs B): boosting kept in every issue",
             "fired": int(len(choice_issue)),
             "mean_delta_mae": round(float(choice_issue.mean()), 4),
             "ci95": _ci(choice_issue.to_numpy()),
