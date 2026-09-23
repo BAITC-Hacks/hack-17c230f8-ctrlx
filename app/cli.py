@@ -67,7 +67,7 @@ def main(argv: list[str]) -> int:
             print(issue.summary)
             print(f"\nrun_id={issue.run_id} rows={len(issue.rows)} warnings={len(issue.warnings)}")
         elif args.cmd == "backtest":
-            from app.service import backtest
+            from app.service import aggregate_path, backtest
 
             issues = backtest(args.start, args.end, refresh=args.refresh)
             for i in issues:
@@ -76,7 +76,7 @@ def main(argv: list[str]) -> int:
                     f"{i.issue_date} {i.run_id} {i.model_name} rev={i.revision} "
                     f"rows={len(i.rows)}{warn}"
                 )
-            print("february_2026.csv written")
+            print(f"{aggregate_path(args.start, args.end).name} written")
         elif args.cmd == "replay":
             from app.agent.replay import replay
 

@@ -6,22 +6,22 @@
 | Критерий (из ТЗ) | Баллы | Чем берём | Как проверят |
 |---|---|---|---|
 | Соответствие задаче и работоспособность | 25 | 28 последовательных выпусков 31.01–27.02 по 48 ч, каждый — полный цикл агента; CSV-прогноз на весь февраль | `uv run python -m app.cli backtest` без ключей → `outputs/forecasts/february_2026.csv` + логи |
-| Техническая реализация | 25 | Агент реально решает: валидирует погоду, выбирает поле по правилу утечки, переключает модель/источник при провале проверок, пересчитывает при обновлении прогона; LLM-планировщик на тех же tools — опция | `runs/<id>/agent_log.jsonl`: шаги, решения, причины; тест на утечку |
+| Техническая реализация | 25 | Агент реально решает: валидирует погоду, выбирает поле по правилу утечки, переключает модель/источник при провале проверок, пересчитывает при обновлении прогона; отдельный диагностический LLM-супервизор — опция | `runs/<id>/agent_log.jsonl`: шаги, решения, причины; тест на утечку |
 | README и воспроизводимость | 25 | 3 команды, офлайн-кэш погоды и данные в репо, macOS + Windows, тесты, smoke со свежего клона | `docs/TESTING.md`, `scripts/smoke.sh` |
 | Ценность и применимость | 15 | Прогноз p10/p50/p90 и сводка диспетчеру по-русски; метрики на holdout против персистентности и кривой мощности | таблица метрик в README |
-| Потенциал и оригинальность | 10 | Воспроизводимое «обновление входных данных» внутри суток; разброс двух NWP-моделей как мера неопределённости; агент независим от модели | лог с `recompute_if_updated`, колонка `wx_model` |
+| Потенциал и оригинальность | 10 | Воспроизводимое «обновление входных данных» внутри суток; расхождение двух NWP-моделей как отдельный флаг риска; агент независим от модели | лог с `recompute_if_updated`, колонка `wx_model` |
 
 ## Требования
 | R-ID | Приоритет | Требование (из ТЗ) | Приёмка: вход → ожидаемый выход | Владелец | Статус |
 |---|---|---|---|---|---|
 | R1 | must | Загрузка исторических данных двух турбин, приведение к часам, флаги простоя и дыр, время SCADA (фиксированный UTC+5) → UTC | `data/raw/*.csv` → `data/processed/hourly.parquet` по `HOURLY_COLUMNS`, ~25 000 часов × 2 турбины, лог допущений в stdout | mustafa | ✅ |
-| R2 | must | Агент сам получает по координатам архивные прогнозы (Open-Meteo Previous Runs), кэш-first, правило day1/day2/day3 против утечки | `app.weather.load_or_fetch()` → `WEATHER_COLUMNS`; `select_for_issue(wx, t0, hours_since_issue)` → `ISSUE_WEATHER_COLUMNS`; `tests/test_weather.py` проверяет, что для каждой строки `safe_previous_day(lead)` ≤ выбранного N | amirkhan | ✅ (обе координаты и живая сверка — в работе) |
+| R2 | must | Агент сам получает по координатам архивные прогнозы (Open-Meteo Previous Runs), кэш-first, правило day1/day2/day3 против утечки | `app.weather.load_or_fetch()` → `WEATHER_COLUMNS`; `select_for_issue(wx, t0, hours_since_issue)` → `ISSUE_WEATHER_COLUMNS`; `tests/test_weather.py` проверяет, что для каждой строки `safe_previous_day(lead)` ≤ выбранного N | amirkhan | ✅ (обе координаты в кэше; пример сверки в runs/live_check) |
 | R3 | must | Модель почасовой выработки: B0 персистентность, B1 кривая мощности на прогнозном ветре (MOS), M1 GBM с квантилями p10/p90; обучение на данных до 31.01.2026 | `uv run python -m app.cli train` → `models/*.pkl` ≤ 50 МБ; `WindCastModel.predict(frame, model_name)` → power_t1, power_t2, p10, p90 | mustafa | ✅ |
 | R4 | must | Ретроспектива: выпуск на 31.01, 01.02, … 27.02, каждый на 24–48 ч почасово | `backtest` → 28 файлов `outputs/forecasts/issue_YYYY-MM-DD.csv` (48 строк rev0) + `february_2026.csv` | mustafa | ✅ |
 | R5 | must | Agentic-цикл: получение погоды → подготовка → модель → почасовой прогноз → анализ → повторный расчёт при обновлении входных данных; работает без ключей | `runs/<run_id>/agent_log.jsonl` + `report.md` на каждый выпуск; в логе есть `validate_weather`, `analyze`, `recompute_if_updated` с `decision`/`reason`; хотя бы один выпуск с `fallback_used` или пересчётом | mustafa | ✅ |
-| R6 | must | README и воспроизводимость: запуск в 3 команды без ключей, macOS и Windows, тесты, smoke | чистый clone → `uv sync && uv run python -m app.cli backtest` < 5 мин; `scripts/smoke.sh` PASS | ansar | 🚧 |
+| R6 | must | README и воспроизводимость: запуск в 3 команды без ключей, macOS и Windows, тесты, smoke | чистый clone → `uv sync && uv run python -m app.cli backtest` < 5 мин; `scripts/smoke.sh` PASS | ansar | ✅ основной Python-путь macOS; итоговая сборка и Windows проверяются отдельно |
 | R7 | should | Метрики на отложенных периодах (январь 2026, февраль 2025) против B0/B1 | `uv run python -m app.cli evaluate --holdout 2026-01` → `outputs/metrics/holdout_2026-01.json` (`MetricsReport`), таблица в README и `docs/SOLUTION.md` | mustafa | ✅ |
-| R8 | should | Страница: выбор выпуска, график p50 + p10–p90 + B1, лента шагов агента, таблица метрик; API по контракту | `GET /api/issues`, `/api/forecast/{date}`, `/api/metrics`, `/api/runs/{id}/log`, `POST /api/run`; `static/index.html` | ansar | 🚧 |
+| R8 | should | Страница: выбор выпуска, график p50 + p10–p90 + B1, лента шагов агента, таблица метрик; API по контракту | `GET /api/issues`, `/api/forecast/{date}`, `/api/metrics`, `/api/runs/{id}/log`, `POST /api/run`; `static/index.html` | ansar | ✅ лёгкий интерфейс; новая платформа проверяется отдельно |
 | R9 | could | LLM-сводка (RU) и отдельный супервизор с динамическим выбором диагностических инструментов | `forecast --supervise --demo-dir runs/llm_demo` → `supervisor.json` с mode=llm, trace и решением accepted/review; `--llm` отдельно включает текстовую сводку | mustafa | 🚧 (код и офлайн-тесты готовы; реальный вызов требует ключа) |
 | R10 | could | Второй источник NWP (`gfs_seamless`): разброс как неопределённость, фолбэк при провале валидации | `wx_model` в CSV, решение в логе | amirkhan (загрузка, идея) / mustafa (агент) | ✅ (запасной источник и флаг расхождения в агенте) |
 
@@ -34,15 +34,17 @@
 
 **Признаки и модели** (`app.features.select_many(wx, t0s, hours_since_issue)` → строки «выпуск × опережение» с допустимым полем погоды; `app.features.add_features`; `WindCastModel.predict(frame, model_name)` → `target, lead, power_t1, power_t2, power_farm, p10, p90, pc`). Модели: `persistence` (среднее 24 ч до выпуска), `power_curve` (бины 0,5 м/с по прогнозному ws100, монотонная, отдельно для day1/day2/day3), `gbm` (HistGradientBoosting из scikit-learn: медиана и квантили 0,1/0,9 с CQR-калибровкой; признаки: ws100, ws100³, ws10, сдвиг ветра, порывы, sin/cos направления, температура, 1/T, sin/cos часа, месяц, опережение, поле, эпоха источника, выход кривой мощности), `climatology` (месяц × час). Выход клипуется в [0, 1].
 
-**Прогноз** `outputs/forecasts/issue_YYYY-MM-DD.csv` и объединение `february_2026.csv` — колонки `ForecastRow`:
+**Выпуск** `outputs/forecasts/issue_YYYY-MM-DD.csv` — колонки `ForecastRow`:
 `issue_time_utc, issue_time_local, target_time_utc, target_time_local, lead_h, horizon(24h|48h), revision(0|1), power_t1, power_t2, power_farm, p10, p90, ws100_fc, wx_field, wx_model, model_name, fallback_used, run_id`.
 Пример строки: `2026-01-31T19:00:00Z,2026-02-01T00:00:00+05:00,2026-02-02T07:00:00Z,2026-02-02T12:00:00+05:00,36,48h,0,0.41,0.39,0.40,0.22,0.63,8.1,day2,best_match,gbm,false,20260201T0000-a1b2`
+
+**Сшитый месяц** `outputs/forecasts/february_2026.csv` имеет отдельный контракт: `target_time_utc, target_time_local, power_farm_plan, power_t1_plan, power_t2_plan, p10_plan, p90_plan, plan_revision, plan_run_id, power_farm_bid, bid_run_id, plan_mw, bid_mw`. Всего 672 уникальных часа февраля. План берётся из последней допустимой ревизии первых суток соответствующего выпуска; заявка — только из rev0 вторых суток предыдущего выпуска. Первые 24 часа заявки пусты: выпуск 30.01 вне заданного диапазона, вымышленные значения не подставляются. Мощность в МВт использует допущение номинала 5 МВт. При аварии источников `ws100_fc` в выпуске может быть пустым (`null` в API), прогноз остаётся числовым.
 
 **Лог агента** `runs/<run_id>/agent_log.jsonl` — строка = `AgentStep`: `{"ts","run_id","issue_time","step","tool","args","status":"ok|warn|fail","summary","decision","reason","duration_ms","llm":{"provider","model","tokens"}|null}`. Рядом `report.md` (сводка диспетчеру).
 
 **Метрики** `outputs/metrics/holdout_<период>.json` — `MetricsReport{period, train_end, rows:[{model, horizon(24h|48h|all), mae, rmse, nmae, bias, skill_vs_persistence, skill_vs_power_curve, n}], created_at}`.
 
-**CLI** (`app/cli.py`): `forecast --issue 2026-01-31 [--refresh] [--llm] [--supervise] [--demo-dir PATH]` · `backtest [--from 2026-01-31] [--to 2026-02-27]` · `train` · `evaluate --holdout 2026-01`. По умолчанию офлайн из кэша; `--refresh` сверяет окно выпуска с API. `--supervise` после числового выпуска выбирает quality/weather/revisions и finish; обязательные проверки могут только ужесточить решение до review. CSV уже выпущен, торговая заявка не отправляется. Подробности и ограничения: `docs/AGENTIC.md`.
+**CLI** (`app/cli.py`): `forecast --issue 2026-01-31 [--refresh] [--llm] [--supervise] [--demo-dir PATH]` · `backtest [--from 2026-01-31] [--to 2026-02-27]` · `train` · `evaluate --holdout 2026-01`. Полный диапазон backtest сохраняет `february_2026.csv`; частичные диапазоны — `range_<from>_<to>.csv`, без замены официального месяца. Обратный диапазон отвергается до расчёта. По умолчанию офлайн из кэша; `--refresh` сверяет окно выпуска с API. `--supervise` после числового выпуска выбирает quality/weather/revisions и finish; обязательные проверки могут только ужесточить решение до review. CSV уже выпущен, торговая заявка не отправляется. Подробности и ограничения: `docs/AGENTIC.md`.
 
 **API** (`app/api/routes.py`, префикс `/api`): `GET /health` · `GET /issues → list[IssueListItem]` · `GET /forecast/{issue_date} → ForecastIssue` · `GET /metrics → list[MetricsReport]` · `GET /runs/{run_id}/log → list[AgentStep]` · `POST /run (RunRequest) → RunResponse`.
 
@@ -56,7 +58,7 @@
 
 Допущения (в README):
 1. «Прогноз на 31 января» = по данным до 31.01 23:50, t0 = 01.02 00:00 Asia/Almaty; горизонт 48 ч (часы 0–23 = «24h», 24–47 = «48h»). Выпуски по дням наблюдения 31.01…27.02 — 28 штук.
-2. Архивные прогнозы = Open-Meteo Previous Runs API (`previous_dayN`, без ключа). Правило: `day1` при опережении ≤ 16 ч, `day2` ≤ 40 ч, иначе `day3` (init ≤ T − 24N, задержка публикации 7 ч — измерена для ECMWF IFS). Проверяется тестом на каждую строку и «отравленным» тестом.
+2. Архивные прогнозы = Open-Meteo Previous Runs API (`previous_dayN`, без ключа). Правило: `day1` при опережении ≤ 16 ч, `day2` ≤ 40 ч, иначе `day3` (init ≤ T − 24N, принятая задержка публикации 7 ч; исторические отметки доступности каждого прогона не сохранены). Проверяется тестом на каждую строку и «отравленным» тестом.
 3. «Обновление входных данных» воспроизводится пересчётом в t0 + 12 ч (rev1): более свежие прогоны становятся допустимыми; пересчитываются часы не раньше чем через 2 ч (опережение ≥ 14 ч), как внутрисуточная корректировка по п. 97–99 Правил оптового рынка.
 4. Обучение только на прогнозной погоде (с 18.02.2024 до 01.02.2026 00:00 по Алматы); 2023 год не используется — для него нет архива прогонов.
 5. Данные организаторов коммитим в репо (12 МБ), чтобы эксперт запустил без наших аккаунтов.
@@ -66,10 +68,11 @@
 ## MVP-срез
 - К 15:50 (must): R1–R6 на модели `power_curve`; `gbm` подключается заменой `model_name`.
 - Если останется время: R7 метрики, R8 страница, R9 LLM-прогон, R10 GFS-разброс.
-- Не делаем: Next.js, Supabase, обучение на historical-forecast 2023, парк из N турбин, деплой (только если лид успеет после 16:30).
+- Основной путь остаётся Python + локальные артефакты, без Supabase и обязательных внешних LLM API. Не добавляем обучение на historical-forecast 2023 и парк из N турбин.
+- После отдельного решения лида 16:45 Claude готовит дополнительный интерфейс в `web/`. Он должен использовать тот же API; готовность оценивается отдельной сборкой и проверкой браузера. Лёгкий интерфейс остаётся доступным независимо от Node.js.
 
 ## Стек
-`py`: FastAPI + pandas + pydantic + scikit-learn (HistGradientBoosting из scikit-learn) + pyarrow (все в `uv.lock`). Данные, ML и пакетный прогон — Python; UI — одна статическая страница с Chart.js (cdnjs).
+`py`: FastAPI + pandas + pydantic + scikit-learn (HistGradientBoosting из scikit-learn) + pyarrow (все в `uv.lock`). Данные, ML и пакетный прогон — Python; лёгкий UI — статическая страница с собственным SVG-графиком без CDN. Дополнительная платформа в `web/` использует отдельную сборку; её зависимости и запуск указываются в README после интеграции.
 
 ## Владение
 | Поток | Кто | Почему он |
