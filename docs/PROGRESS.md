@@ -27,3 +27,4 @@
 - 15:36 · mustafa · Мустафа · agent evidence: January 2026 replay (ablation + decision ledger with bootstrap CI), fault injection (agent survives 4/4 broken inputs); fix empty-source and no-weather crashes (R5, R7) · тесты: pass
 - 15:36 · mustafa · Мустафа · docs: SOLUTION.md section 9 with replay ablation, decision ledger and fault-injection results (R5) · тесты: pass
 - 15:37 · mustafa · Мустафа · cli: forecast --llm --demo-dir for a committed LLM demo run without touching test outputs (R9) · тесты: pass
+- 15:45 · mustafa · Мустафа · models: docstring says HistGradientBoosting, not LightGBM (R3) · тесты: pass

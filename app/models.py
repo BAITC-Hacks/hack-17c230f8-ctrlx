@@ -1,5 +1,5 @@
-"""R3 — forecasting models: power curve (MOS on forecast wind), LightGBM median + quantiles
-with conformal (CQR) calibration, persistence and climatology baselines."""
+"""R3 — forecasting models: power curve (MOS on forecast wind), gradient boosting (scikit-learn
+HistGradientBoosting) median + quantiles with conformal (CQR) calibration, climatology baseline."""
 
 from dataclasses import dataclass, field
 
