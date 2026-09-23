@@ -9,12 +9,14 @@
 | Шаблоны документации | `README.md`, `docs/` | структура README по п. 5.4.15 и инструкции организаторов, требования, прогресс |
 | Справка по домену «Финансы» | `docs/DOMAIN-FINANCE.md` | регуляторика, открытые данные, метрики, паттерны архитектуры, обзор 10 типовых сценариев ИИ в финсекторе — опора для разбора ТЗ, не решения; собрана по открытым источникам, ссылки внутри |
 | Каркас приложения (py) | `app/`, `static/`, `tests/`, `Dockerfile` | FastAPI: API + CLI + страница → rule-based ядро / LLM-клиент, маскирование ПДн перед LLM, оценка метриками, health-check, тесты |
+| Каркас веб-приложения (web) | `web/components/ui/`, `web/lib/utils.ts`, конфиги `web/*.config.*`, `web/package.json`, `web/pnpm-lock.yaml` | Next.js 16 + Tailwind 4 + shadcn/ui: пустой шаблон из той же заготовки (`starters/web`), скопирован после старта. Экраны платформы, клиент API, графики, оболочка и стили (`web/app/*`, `web/components/charts.tsx`, `web/components/shell.tsx`, `web/lib/api.ts`) написаны в ходе соревнования |
 
 Источник: приватный репозиторий-заготовка команды (только инструменты и шаблоны), версия `8039bd3` от 23.09.2026 12:48. По запросу организаторов откроем к нему доступ.
 
 ## Сторонние компоненты
 - Скилл `ui-craft` — объединение и адаптация скиллов `frontend-design` (Anthropic, Apache-2.0) и `emil-design-eng` (Emil Kowalski, github.com/emilkowalski/skill @85e8e23, MIT); лицензии и оригинальные тексты — в `.agents/skills/ui-craft/`.
 - Скилл `grilling` — Matt Pocock, github.com/mattpocock/skills (коммит c55ee46), MIT (`.agents/skills/grilling/LICENSE`), без изменений.
+- Next.js, React, Tailwind CSS, shadcn/ui, Base UI, sonner, cn — MIT; lucide-react — ISC; class-variance-authority — Apache-2.0 (платформа `web/`).
 - FastAPI, pydantic, pytest, ruff — MIT; uvicorn, pandas, python-dotenv, httpx — BSD-3-Clause; openai-python — Apache-2.0.
 
 ## AI-инструменты разработки

@@ -57,3 +57,4 @@
 - 16:48 · mustafa · Мустафа · Fix resilient publication and regenerate validated forecasts (R1-R7,R9) · тесты: pass
 - 16:51 · amirkhan · Амирхан · fix(ask,weather): honest grounded flag for template answers, log-only runs reported, run_id/model-name validation, LLM sources checked against facts, markup stripped, digit-group numbers; tests (R2, R9) · тесты: pass
 - 17:01 · mustafa · Мустафа · platform: WindCast web app (Next.js, web/) — February overview heatmap, issues with 48 h chart and recompute, day-ahead bid in MWh with CSV, agent journal, accuracy and evidence, ask the agent; POST /api/ask wired + test (R8, R9) · тесты: pass
+- 17:02 · mustafa · Мустафа · docs: PREPARED discloses the prepared Next.js starter used for web/ and its licenses (R6) · тесты: pass
