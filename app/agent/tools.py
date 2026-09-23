@@ -84,6 +84,11 @@ def fetch_weather(model_name: str = "best_match", refresh: bool = False) -> pd.D
     return _weather(model_name, refresh)
 
 
+@tool("Live request of the issue window by the turbines' coordinates, compared with the archive")
+def live_check(t0: pd.Timestamp, model_name: str = "best_match") -> dict:
+    return weather.fetch_issue_window(t0, model_name)
+
+
 @tool("Pick, for each of the 48 target hours, the freshest run already published at the issue")
 def select_weather(wx: pd.DataFrame, t0: pd.Timestamp, hours_since_issue: int = 0) -> pd.DataFrame:
     return select_many(wx, [t0], hours_since_issue)

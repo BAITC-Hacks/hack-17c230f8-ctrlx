@@ -329,19 +329,44 @@ def run_issue(
     )
 
     s = time.perf_counter()
-    wx = tools.fetch_weather("best_match", refresh)
-    wg = tools.fetch_weather("gfs_seamless", refresh)
+    # the committed archive stays the source of truth (reproducibility); --refresh adds a live
+    # request of this issue's window by the turbines' coordinates and compares it with the archive
+    wx = tools.fetch_weather("best_match", False)
+    wg = tools.fetch_weather("gfs_seamless", False)
+    live = tools.live_check(t0) if refresh else None
+    cells = wx.attrs.get("cells") or []
+    same = wx.attrs.get("same_cell")
+    where = (
+        f"по координатам обеих турбин ({'одна ячейка сетки' if same else 'разные ячейки'})"
+        if cells
+        else "по координатам ВЭС"
+    )
+    if live is None:
+        decision, reason = "cache", "офлайн-архив из репозитория (ответ API, sha256 в meta.json)"
+    elif not live.get("live"):
+        decision, reason = "cache", f"живой запрос недоступен ({live.get('reason', '')[:80]})"
+    elif live["mismatches"] == 0:
+        decision = "live_match"
+        reason = f"живой ответ API совпал с архивом на {live['compared']} ч окна выпуска"
+    else:
+        decision = "live_mismatch"
+        reason = (
+            f"живой ответ отличается от архива в {live['mismatches']} ч "
+            f"(макс. {live['max_abs_diff']:.2f}); прогноз строится по архиву"
+        )
     log.step(
         "fetch_weather",
-        "ok",
-        f"Open-Meteo Previous Runs по координатам ВЭС: best_match и gfs_seamless, "
-        f"{len(wx)} ч архива",
-        args={"models": ["best_match", "gfs_seamless"], "refresh": refresh},
+        "ok" if decision != "live_mismatch" else "warn",
+        f"Open-Meteo Previous Runs {where}: best_match и gfs_seamless, {len(wx)} ч архива",
+        args={
+            "models": ["best_match", "gfs_seamless"],
+            "refresh": refresh,
+            "cells": cells,
+            "live_check": live,
+        },
         started=s,
-        decision="live" if refresh else "cache",
-        reason="живой запрос к API"
-        if refresh
-        else "офлайн-кэш из репозитория (тот же ответ API, sha256 в meta.json)",
+        decision=decision,
+        reason=reason,
     )
 
     s = time.perf_counter()
