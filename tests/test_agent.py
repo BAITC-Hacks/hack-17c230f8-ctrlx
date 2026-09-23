@@ -54,6 +54,13 @@ def test_every_row_uses_a_run_published_before_the_issue(issue_run):
         assert n >= config.safe_previous_day(r.lead_h, hours_since), r
 
 
+def test_every_used_run_was_available_before_the_issue(issue_run):
+    """Provenance in the log: the newest run behind any hour was published before t0."""
+    issue, _, runs = issue_run
+    val = next(s for s in RunLog.read(issue.run_id, base_dir=runs) if s.tool == "validate_weather")
+    assert val.args["min_margin_h"] >= 0
+
+
 def test_poisoned_future_does_not_change_the_forecast():
     """Replace everything unknown at t0 with garbage: the forecast must stay the same."""
     t0 = issue_time_utc(ISSUE)

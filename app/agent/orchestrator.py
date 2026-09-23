@@ -346,7 +346,13 @@ def run_issue(
         f"допустимость прогонов {'ок' if val['admissible'] else 'НАРУШЕНА'}; свежесть: "
         + ", ".join(f"{k}×{v}" for k, v in sorted(val["fields"].items()))
         + f"; источник best_match — {val['source']}; средний ветер за 30 дней "
-        f"{shift['recent_mean_ws']} м/с против {shift['train_mean_ws']} в обучении",
+        f"{shift['recent_mean_ws']} м/с против {shift['train_mean_ws']} в обучении"
+        + (
+            f"; самый свежий использованный прогон стал доступен за "
+            f"{val['min_margin_h']:.0f} ч до момента прогноза"
+            if val.get("min_margin_h") is not None
+            else ""
+        ),
         args={**val, **shift},
         started=s,
         decision=decision,

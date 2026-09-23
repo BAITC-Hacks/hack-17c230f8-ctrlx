@@ -3,7 +3,11 @@
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, reset_tzpath
+
+# Time-zone rules come from the pinned `tzdata` package, never from the OS: an old system database
+# (before 2024a) still puts Almaty at UTC+6 and would shift every issue by an hour on that machine.
+reset_tzpath(to=[])
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_RAW = ROOT / "data" / "raw"

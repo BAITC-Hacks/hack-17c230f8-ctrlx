@@ -98,6 +98,17 @@ def validate_weather(sel: pd.DataFrame, t0: pd.Timestamp, hours_since_issue: int
         for f, lead in zip(sel["field"], sel["lead"], strict=True)
         if f > 0
     )
+    # provenance: the newest run each hour could come from, and when it became available
+    ok_rows = sel["field"] > 0
+    init_max = (
+        pd.DatetimeIndex(sel.loc[ok_rows, "target"])
+        - pd.to_timedelta(24 * sel.loc[ok_rows, "field"].to_numpy(), unit="h")
+    ).floor("6h")
+    available = init_max + pd.Timedelta(hours=config.PUBLISH_DELAY_H)
+    as_of = t0 + pd.Timedelta(hours=hours_since_issue)
+    margin_h = (
+        float(((as_of - available) / pd.Timedelta(hours=1)).min()) if len(available) else None
+    )
     covered = int(ws.notna().sum())
     in_range = bool(((ws >= lo) & (ws <= hi)).all()) if covered else False
     return {
@@ -108,6 +119,8 @@ def validate_weather(sel: pd.DataFrame, t0: pd.Timestamp, hours_since_issue: int
         "fields": {f"day{int(k)}": int(v) for k, v in sel["field"].value_counts().items() if k},
         "ok": covered == len(sel) and in_range and admissible,
         "source": "ECMWF IFS HRES" if t0 >= pd.Timestamp("2025-10-01", tz="UTC") else "DWD ICON",
+        "latest_run_available_utc": available.max().isoformat() if len(available) else None,
+        "min_margin_h": margin_h,
     }
 
 
