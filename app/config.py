@@ -34,9 +34,12 @@ TURBINES: dict[int, Turbine] = {
 FARM_LAT = 43.645150
 FARM_LON = 78.535604
 
-# "Статистическое время" in the raw CSVs is Almaty local time (UTC+6 before 2024-03-01, then UTC+5);
-# zoneinfo handles the switch. Everything else is stored in UTC.
+# Display / issue time zone. Kazakhstan is UTC+5 since 2024-03-01, so the test month is UTC+5.
 LOCAL_TZ = ZoneInfo("Asia/Almaty")
+# "Статистическое время" in the raw CSVs: a fixed UTC+5 clock for the whole series. The SCADA clock
+# did not jump on 2024-03-01 (diurnal temperature phase shifts by +6 min, not +60), and the
+# lag to Open-Meteo forecasts peaks at +5 h. Everything else is stored in UTC.
+DATA_TZ = ZoneInfo("Etc/GMT-5")
 
 # Raw data step is 10 minutes; an hour needs at least this many samples, otherwise NaN.
 RAW_STEP_MIN = 10
@@ -49,12 +52,18 @@ TEST_ISSUE_FIRST = date(2026, 1, 31)  # observation day D; t0 = 2026-02-01 00:00
 TEST_ISSUE_LAST = date(2026, 2, 27)  # t0 = 2026-02-28 00:00 local; covers 28.02 and 01.03
 TRAIN_END = date(2026, 1, 31)  # last observed day, inclusive
 
+# Training window: the previous-runs archive starts mid-February 2024.
+TRAIN_START = date(2024, 2, 18)
+# Model outputs, persisted by `python -m app.cli train`.
+MODEL_PATH = MODELS_DIR / "windcast.pkl"
+
 # Weather: Open-Meteo Previous Runs API. previous_dayN for target hour T comes from a model run
 # initialised no later than T - 24N h. Runs are published with a delay; we require
 # init + PUBLISH_DELAY_H <= t0 (+ hours elapsed since t0 on an intraday refresh).
 WEATHER_API = "https://previous-runs-api.open-meteo.com/v1/forecast"
 WEATHER_MODELS = ("best_match", "gfs_seamless")  # primary, fallback / spread indicator
-PUBLISH_DELAY_H = 6
+# Measured availability on Open-Meteo: IFS HRES 7.0 h, IFS 0.25° 7.8 h, GFS 5.5-6.5 h, ICON 3.8 h.
+PUBLISH_DELAY_H = 7
 MAX_PREVIOUS_DAY = 3
 INTRADAY_REFRESH_H = 12  # "input data updated": recompute at t0 + 12 h with fresher runs
 
@@ -62,7 +71,7 @@ INTRADAY_REFRESH_H = 12  # "input data updated": recompute at t0 + 12 h with fre
 def safe_previous_day(lead_h: int, hours_since_issue: int = 0) -> int:
     """Smallest N such that previous_dayN was already published at t0 + hours_since_issue.
 
-    lead 0..17 -> 1, 18..41 -> 2, 42..65 -> 3 (at hours_since_issue = 0). Conservative on purpose.
+    lead 0..16 -> 1, 17..40 -> 2, 41..64 -> 3 (at hours_since_issue = 0). Conservative on purpose.
     """
     n = (lead_h + PUBLISH_DELAY_H - hours_since_issue) // 24 + 1
     return max(1, min(MAX_PREVIOUS_DAY, n))
