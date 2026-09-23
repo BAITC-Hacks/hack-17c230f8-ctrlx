@@ -80,3 +80,4 @@
 - 17:48 · mustafa · Мустафа · README: production links — platform on Vercel, API on Railway (R6, R8) · тесты: pass
 - 17:50 · mustafa · Мустафа · README: how the jury checks new dates on the deployed platform and via API (R6, R8) · тесты: pass
 - 17:50 · mustafa · Мустафа · README: Google Drive originals (CRLF) get their own sha256, repo files stay LF (R6) · тесты: pass
+- 17:52 · mustafa · Мустафа · README: describe the version shown on the IT screen as it really is (R6) · тесты: pass
