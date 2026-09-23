@@ -57,6 +57,11 @@ def _when(ts) -> str:
     return f"{t.day} {MONTHS[t.month - 1]}, {t:%H:%M}"
 
 
+def _at(ts) -> str:
+    t = _local(ts)
+    return f"{t.day} {MONTHS[t.month - 1]} в {t:%H:%M}"
+
+
 def _run_id(issue_date: date, t0: pd.Timestamp) -> str:
     """Content fingerprint, not wall-clock time: the same inputs and model give the same id."""
     m = tools.model()
@@ -489,7 +494,8 @@ def run_issue(
         log.step(
             "recompute_if_updated",
             "warn",
-            f"В {_when(t1)} вышел более свежий прогон для {changed} ч, но он не прошёл {failed}",
+            f"{_at(t1).capitalize()}: вышел более свежий прогон для {changed} ч, "
+            f"но он не прошёл {failed}",
             args={"hours_since_issue": config.INTRADAY_REFRESH_H, "changed_hours": changed},
             started=s,
             decision="keep_revision_0",
@@ -516,7 +522,8 @@ def run_issue(
         log.step(
             "recompute_if_updated",
             "ok",
-            f"В {_when(t1)} для {changed} из {int(later.sum())} часов (не раньше чем за 2 ч "
+            f"{_at(t1).capitalize()}: для {changed} из {int(later.sum())} часов "
+            f"(не раньше чем за 2 ч "
             f"до часа) доступен более свежий прогон → ревизия 1; средний сдвиг "
             f"{delta.mean():.0%}, наибольший {delta.max():.0%} — {_when(pred1['target'].iloc[i])}",
             args={"hours_since_issue": config.INTRADAY_REFRESH_H, **recompute},
@@ -529,7 +536,7 @@ def run_issue(
         log.step(
             "recompute_if_updated",
             "ok",
-            f"В {_when(t1)} новых допустимых прогонов нет",
+            f"{_at(t1).capitalize()}: новых допустимых прогонов нет",
             args={"hours_since_issue": config.INTRADAY_REFRESH_H},
             started=s,
             decision="no_update",
