@@ -3,9 +3,10 @@
 # This checks exactly what is ON GITHUB: fresh clone → install → test → start → health → main scenario.
 # /ship keeps SMOKE_PATH / SMOKE_BODY in sync with the README's main scenario.
 set -uo pipefail
-SMOKE_PATH="${SMOKE_PATH:-/api/analyze}"
-default_body='{"text":"Пример текста для проверки основного сценария"}'
-SMOKE_BODY="${SMOKE_BODY:-$default_body}"
+# Main scenario is a GET: the forecast issue the README tells the expert to open.
+SMOKE_PATH="${SMOKE_PATH:-/api/forecast/2026-01-31}"
+SMOKE_METHOD="${SMOKE_METHOD:-GET}"
+SMOKE_BODY="${SMOKE_BODY:-}"
 
 root=$(git rev-parse --show-toplevel) || exit 1
 url=$(git -C "$root" remote get-url origin)
@@ -60,8 +61,12 @@ for _ in $(seq 1 60); do
 done
 if [ "$up" = 1 ]; then
   passed="$passed start"; echo "✔ start: $(curl -s "http://localhost:$port/api/health")"
-  code=$(curl -s -o "$work/scenario.json" -w '%{http_code}' -X POST "http://localhost:$port$SMOKE_PATH" \
-    -H 'content-type: application/json' -d "$SMOKE_BODY")
+  if [ "$SMOKE_METHOD" = "GET" ]; then
+    code=$(curl -s -o "$work/scenario.json" -w '%{http_code}' "http://localhost:$port$SMOKE_PATH")
+  else
+    code=$(curl -s -o "$work/scenario.json" -w '%{http_code}' -X "$SMOKE_METHOD" "http://localhost:$port$SMOKE_PATH" \
+      -H 'content-type: application/json' -d "$SMOKE_BODY")
+  fi
   if [ "$code" = "200" ]; then
     passed="$passed scenario"; echo "✔ scenario $SMOKE_PATH → $(head -c 300 "$work/scenario.json")"
   else
