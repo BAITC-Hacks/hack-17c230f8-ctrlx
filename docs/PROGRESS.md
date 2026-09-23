@@ -16,3 +16,4 @@
 - 15:16 · ansar · Ансар · docs: README, TESTING and smoke for the wind-farm case (R6) · тесты: pass
 - 15:17 · mustafa · Мустафа · docs: SOLUTION.md — bid alignment (D+2 = day-ahead bid before 08:00), poison leak test, decision ledger, regulator KPIs (R5, R7) · тесты: pass
 - 15:21 · mustafa · Мустафа · models: leak-safe issue simulation, power curve per field, LightGBM median + CQR quantiles; train and hold-out evaluate (Jan-2026 nMAE 15.4%, Feb-2025 17.7%) (R3, R7) · тесты: pass
+- 15:22 · amirkhan · Амирхан · docs(ideas): 8 ideas with measured numbers and sources for README (R10, IDEA-1..8) · тесты: pass
