@@ -59,7 +59,9 @@ function plural(n: number, forms: [string, string, string]): string {
   if (b >= 2 && b <= 4) return forms[1];
   return forms[2];
 }
-const hours = (n: number) => `${num(n, 0)} ${plural(n, ["час", "часа", "часов"])}`;
+// n counts (issue, hour) pairs: every hour appears in two issues (as D+1 and as D+2)
+const hours = (n: number) =>
+  `${num(n, 0)} ${plural(n, ["пара", "пары", "пар"])} «выпуск × час»`;
 const ofHours = (n: number) => `${n} ${plural(n, ["часа", "часов", "часов"])}`;
 
 function signed(value: number, digits: number, unit: string): string {

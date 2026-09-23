@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   type ForecastRow,
+  RATED_MW,
   WX_FIELD_LABEL,
   dayLabel,
   hhmm,
@@ -41,6 +42,9 @@ export function ForecastChart({ rows, series = "power_farm" }: {
   const line = path(latest.map((r) => [X(r.lead_h), Y(r[series])]));
   const old = path(rev0.filter((r) => recomputed.has(r.lead_h)).map((r) => [X(r.lead_h), Y(r[series])]));
   const firstRecomputed = Math.min(...recomputed);
+  const station = series === "power_farm"; // the p10–p90 band is modelled for the station only
+  const toMw = (share: number) =>
+    `${(share * (station ? RATED_MW : RATED_MW / 2)).toFixed(1).replace(".", ",")} МВт`;
   return (
     <div className="relative">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img"
@@ -53,7 +57,7 @@ export function ForecastChart({ rows, series = "power_farm" }: {
             </text>
           </g>
         ))}
-        <path d={band} className="fill-primary/15" />
+        {station && <path d={band} className="fill-primary/15" />}
         <line x1={X(24)} x2={X(24)} y1={PAD.t} y2={H - PAD.b} className="stroke-foreground/40" strokeDasharray="4 4" />
         <text x={X(24) + 6} y={PAD.t + 12} className="fill-muted-foreground text-[11px]">
           сутки D+2 · суточная заявка
@@ -85,7 +89,8 @@ export function ForecastChart({ rows, series = "power_farm" }: {
         {hover ? (
           <span>
             <b className="text-foreground">{dayLabel(hover.target_time_local)}, {hhmm(hover.target_time_local)}</b>
-            {" · "}{pct(hover[series])} ({mw(hover[series])}) · коридор {pct(hover.p10)}–{pct(hover.p90)}
+            {" · "}{pct(hover[series])} ({toMw(hover[series])})
+            {station ? ` · коридор ${pct(hover.p10)}–${pct(hover.p90)}` : " · номинал турбины 2,5 МВт"}
             {" · "}ветер {hover.ws100_fc ?? "—"} м/с · {WX_FIELD_LABEL[hover.wx_field]}
             {hover.revision === 1 ? " · пересчитано" : ""}
           </span>

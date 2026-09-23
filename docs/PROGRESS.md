@@ -59,3 +59,4 @@
 - 17:01 · mustafa · Мустафа · platform: WindCast web app (Next.js, web/) — February overview heatmap, issues with 48 h chart and recompute, day-ahead bid in MWh with CSV, agent journal, accuracy and evidence, ask the agent; POST /api/ask wired + test (R8, R9) · тесты: pass
 - 17:02 · mustafa · Мустафа · docs: PREPARED discloses the prepared Next.js starter used for web/ and its licenses (R6) · тесты: pass
 - 17:03 · mustafa · Мустафа · Protect monthly export and document release audit (R4,R6) · тесты: pass
+- 17:04 · mustafa · Мустафа · platform: integration screen for the customer's IT (architecture, API, formats, on-prem deployment, pilot roadmap); per-turbine MW in chart; honest pair counts and quantile sums (R8) · тесты: pass
