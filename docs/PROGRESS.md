@@ -83,3 +83,4 @@
 - 17:52 · mustafa · Мустафа · README: describe the version shown on the IT screen as it really is (R6) · тесты: pass
 - 17:58 · mustafa · Мустафа · README: name the borrowed UI components and skills instead of denying borrowings (R6) · тесты: pass
 - 17:58 · mustafa · Мустафа · README: light page URL on the backend root (R6, R8) · тесты: pass
+- 17:58 · mustafa · Мустафа · README: light page URL on the backend root (R6, R8) · тесты: pass
