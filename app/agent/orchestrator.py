@@ -65,7 +65,7 @@ def _at(ts) -> str:
     return f"{t.day} {MONTHS[t.month - 1]} в {t:%H:%M}"
 
 
-def _run_id(issue_date: date, t0: pd.Timestamp) -> str:
+def _run_id(issue_date: date, t0: pd.Timestamp, input_fingerprint: str = "") -> str:
     """Content fingerprint, not wall-clock time: the same inputs and model give the same id."""
     m = tools.model()
     seed = f"{issue_date}|{m.train_end.isoformat()}|{m.cqr_qhat:.8f}|{m.meta.get('rows')}|"
@@ -73,7 +73,26 @@ def _run_id(issue_date: date, t0: pd.Timestamp) -> str:
         cache = config.WEATHER_CACHE / f"prev_runs_{name}.json"
         if cache.exists():
             seed += hashlib.sha256(cache.read_bytes()).hexdigest()
+    if input_fingerprint:
+        seed += "|live_inputs:" + input_fingerprint
     return f"{_local(t0):%Y%m%dT%H%M}-{hashlib.sha256(seed.encode()).hexdigest()[:6]}"
+
+
+def _live_weather_inputs(t0, frames, infos) -> str | None:
+    """R5: retain the exact live window that determines this run's identity."""
+    if not any(info.get("source") == "live" for info in infos.values()):
+        return None
+    payload = {"t0_utc": t0.isoformat(), "sources": infos, "frames": {}}
+    for name, frame in frames.items():
+        window = frame.loc[
+            frame["time_utc"].between(
+                t0 - pd.Timedelta(days=30), t0 + pd.Timedelta(days=3)
+            )
+        ].sort_values("time_utc")
+        payload["frames"][name] = json.loads(
+            window.to_json(orient="table", date_format="iso", double_precision=15, index=False)
+        )
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def _rows(pred, sel, t0, revision, model_name, wx_model, fallback, run_id) -> list[dict]:
@@ -402,8 +421,18 @@ def _build_issue(
             f"(обучена до {tools.model().train_end:%Y-%m-%d %H:%M} UTC); для проверки прошлого "
             "по факту используйте `python -m app.cli replay --month YYYY-MM`"
         )
-    run_id = _run_id(issue_date, t0)
+    fetch_started = time.perf_counter()
+    wx, wxinfo = tools.weather_for_issue("best_match", t0, refresh)
+    wg, wginfo = tools.weather_for_issue("gfs_seamless", t0, refresh)
+    weather_inputs = _live_weather_inputs(
+        t0, {"best_match": wx, "gfs_seamless": wg},
+        {"best_match": wxinfo, "gfs_seamless": wginfo},
+    )
+    fingerprint = hashlib.sha256(weather_inputs.encode()).hexdigest() if weather_inputs else ""
+    run_id = _run_id(issue_date, t0, fingerprint)
     log = RunLog(run_id, t0.to_pydatetime(), base_dir=runs_dir)
+    if weather_inputs is not None:
+        (log.dir / "weather_inputs.json").write_text(weather_inputs + "\n", encoding="utf-8")
 
     f = tools.facts()
     facts_end = f["p"].last_valid_index() + pd.Timedelta(hours=1)
@@ -428,11 +457,9 @@ def _build_issue(
         else "факт известен до момента прогноза",
     )
 
-    s = time.perf_counter()
+    s = fetch_started
     # the committed archive stays the source of truth (reproducibility); --refresh adds a live
     # request of this issue's window by the turbines' coordinates and compares it with the archive
-    wx, wxinfo = tools.weather_for_issue("best_match", t0, refresh)
-    wg, _ = tools.weather_for_issue("gfs_seamless", t0, refresh)
     live = tools.live_check(t0) if refresh and wxinfo["covered"] else None
     cells = wx.attrs.get("cells") or []
     same = wx.attrs.get("same_cell")
@@ -478,6 +505,8 @@ def _build_issue(
             "cells": cells,
             "live_check": live,
             "weather_source": wxinfo,
+            "secondary_weather_source": wginfo,
+            "live_input_sha256": fingerprint or None,
         },
         started=s,
         decision=decision,

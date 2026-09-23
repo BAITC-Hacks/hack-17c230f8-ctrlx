@@ -1,6 +1,9 @@
 """R1 — historical SCADA data: raw 10-minute CSVs -> hourly per turbine and farm series (UTC)."""
 
+import hashlib
 import json
+from functools import lru_cache
+from pathlib import Path
 
 import pandas as pd
 
@@ -66,13 +69,25 @@ def build_hourly(save: bool = True) -> pd.DataFrame:
     return out
 
 
-def _raw_hashes() -> dict[str, str]:
-    import hashlib
+@lru_cache(maxsize=16)
+def _csv_hash(path: Path, identity: tuple[int, ...]) -> str:
+    """Cache only while stat identity is unchanged; Git line endings are equivalent CSV."""
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
-    return {
-        t.raw_file: hashlib.sha256((DATA_RAW / t.raw_file).read_bytes()).hexdigest()
-        for t in TURBINES.values()
-    }
+
+def _raw_hashes() -> dict[str, str]:
+    hashes = {}
+    for turbine in TURBINES.values():
+        path = (DATA_RAW / turbine.raw_file).resolve()
+        stat = path.stat()
+        identity = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+        hashes[turbine.raw_file] = _csv_hash(path, identity)
+    return hashes
+
+
+def raw_fingerprint() -> tuple[tuple[str, str], ...]:
+    """Semantic source identity for long-lived consumers; cheap for unchanged raw files."""
+    return tuple(sorted(_raw_hashes().items()))
 
 
 def _hourly_cache_fresh() -> bool:

@@ -1,16 +1,16 @@
 """Agent tools (lead's zone). Deterministic functions that compute every number; the orchestrator
 decides which to call and what to do with the result, the optional LLM only explains.
 
-Heavy inputs (history, weather archive, trained model) are loaded once per process.
+Weather and models are cached; history is refreshed when SCADA source content changes.
 """
 
-from functools import cache
+from functools import cache, lru_cache
 
 import numpy as np
 import pandas as pd
 
 from app import config, weather
-from app.data import farm_hourly
+from app.data import farm_hourly, raw_fingerprint
 from app.features import select_many
 from app.models import PowerCurve, WindCastModel, persistence
 from app.train import load as load_model
@@ -32,8 +32,13 @@ def tool(description: str, parameters: dict | None = None):
     return wrap
 
 
-@cache
 def facts() -> pd.DataFrame:
+    """Refresh in a running API when raw SCADA content changes; retain unchanged frames."""
+    return _facts_for_source(raw_fingerprint())
+
+
+@lru_cache(maxsize=1)
+def _facts_for_source(fingerprint: tuple[tuple[str, str], ...]) -> pd.DataFrame:
     return farm_hourly()
 
 

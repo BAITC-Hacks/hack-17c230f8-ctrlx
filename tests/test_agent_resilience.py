@@ -22,6 +22,31 @@ from app.schemas import ForecastRow
 ISSUE = date(2026, 1, 31)
 
 
+def test_live_inputs_keep_distinct_run_history(fake_pipeline, monkeypatch, tmp_path):
+    t0 = issue_time_utc(ISSUE)
+    wind = {"value": 7.0}
+
+    def live_weather(name, _t0, refresh):
+        return pd.DataFrame({
+            "time_utc": [t0], "source": [name], "ws100_d1": [wind["value"]],
+        }), {"source": "live", "covered": False, "live_hours": 1}
+
+    monkeypatch.setattr(tools, "weather_for_issue", live_weather)
+    runs = tmp_path / "runs"
+    first = orchestrator.run_issue(ISSUE, out_dir=tmp_path / "out", runs_dir=runs)
+    snapshot = runs / first.run_id / "weather_inputs.json"
+    original = snapshot.read_bytes()
+    repeated = orchestrator.run_issue(ISSUE, out_dir=tmp_path / "out", runs_dir=runs)
+    assert repeated.run_id == first.run_id
+    wind["value"] = 9.0
+    changed = orchestrator.run_issue(ISSUE, out_dir=tmp_path / "out", runs_dir=runs)
+    assert changed.run_id != first.run_id
+    assert snapshot.read_bytes() == original
+    new_inputs = json.loads((runs / changed.run_id / "weather_inputs.json").read_text())
+    assert new_inputs["frames"]["best_match"]["data"][0]["ws100_d1"] == 9.0
+    assert (runs / first.run_id / "agent_log.jsonl").exists()
+
+
 @pytest.fixture
 def fake_pipeline(monkeypatch):
     t0 = issue_time_utc(ISSUE)

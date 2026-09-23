@@ -74,3 +74,4 @@
 - 17:31 · mustafa · Мустафа · forecast on any new date: the agent fetches the weather window live by both turbines' coordinates when the archive does not cover the issue (archive untouched, offline falls back safely); hash-based hourly cache freshness for new SCADA files; platform button «Прогноз на новую дату»; README; tests (R2, R4, R5, R8) · тесты: pass
 - 17:33 · mustafa · Мустафа · honesty guard: refuse issues whose forecast moment is in the future; no 12:00 recompute before it happens; docstring and README cleanup for live weather (R5) · тесты: pass
 - 17:38 · mustafa · Мустафа · ask screen: a date in the question selects the matching issue, the covered days are always shown, example questions in the placeholder (R9) · тесты: pass
+- 17:41 · mustafa · Мустафа · Fix live provenance and SCADA refresh; add jury brief (R1,R5,R6) · тесты: pass
