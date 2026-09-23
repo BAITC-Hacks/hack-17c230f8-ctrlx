@@ -453,6 +453,20 @@ function renderSummary(issue) {
     : "";
 }
 
+// The point of a better forecast is money: every hour outside the ±5 % corridor is paid for as
+// imbalance. The estimate lives in extras; show it next to MAE so accuracy has a price tag.
+function money(r) {
+  const c = r.extras?.imbalance_cost_upper_bound_mln_tg;
+  if (!c || c.gbm == null || c.persistence == null) return "";
+  const saved = c.persistence - c.gbm;
+  return `<p class="stat-l" style="margin:-6px 0 14px">
+    Плата за дисбаланс, верхняя оценка за период: персистентность
+    <b class="num">${c.persistence.toFixed(2)}</b> млн ₸ →
+    модель <b class="num">${c.gbm.toFixed(2)}</b> млн ₸ —
+    <b style="color:var(--accent)">экономия ${saved.toFixed(2)} млн ₸</b>.
+    <span style="color:var(--ink-faint)">Допущения: ${esc(c.assumptions || "см. outputs/metrics")}</span></p>`;
+}
+
 function renderMetrics(reports) {
   if (!reports.length) { $("metrics").innerHTML = `<p class="empty">метрики считаются — появятся после бэктеста</p>`; return; }
   // every hold-out period, not just one: which file was generated last is not a criterion
@@ -463,7 +477,8 @@ function renderMetrics(reports) {
       <td>${esc(m.model)}</td><td class="num">${esc(m.horizon)}</td>
       <td class="num">${m.mae.toFixed(3)}</td><td class="num">${m.nmae.toFixed(1)}%</td>
       <td class="num">${m.bias >= 0 ? "+" : ""}${m.bias.toFixed(3)}</td><td class="num">${m.n}</td>
-    </tr>`).join("")}</tbody></table>`).join("");
+    </tr>`).join("")}</tbody></table>
+    ${money(r)}`).join("");
 }
 
 // The evidence JSON is written in English by the CLI; the page is Russian. Map what we know,

@@ -39,3 +39,4 @@
 - 16:05 · ansar · Ансар · fix(critics): contain run_id everywhere, no file contents in 500s, corrupt log cannot hide a valid issue, all hold-out periods shown, honest label for climatology hours (R8) · тесты: pass
 - 16:05 · amirkhan · Амирхан · feat(weather): request by both turbine coordinates (grid cells + same_cell in meta), fetch_issue_window live check of the issue window against the cache, cache re-downloaded for both points; tests (R2) · тесты: pass
 - 16:08 · mustafa · Мустафа · docker image carries model and results; self-check says no_facts when there is nothing to check; unrounded recompute deltas; regenerated outputs (R5, R6) · тесты: pass
+- 16:11 · ansar · Ансар · docs+ui: imbalance cost in tenge next to accuracy, TESTING log up to date (R6, R7, R8) · тесты: pass
