@@ -1,6 +1,6 @@
-# CtrlX · HackAlem AI 2026 — <название продукта>
+# CtrlX · HackAlem AI 2026 — WindCast Agent
 
-> <одна фраза: кому и какую боль снимаем> · Трек: Финансы · ТЗ: `docs/TASK.md` · Требования и контракт: `docs/REQUIREMENTS.md`
+> Диспетчеру ВЭС и трейдеру Самрук-Энерго: агент сам берёт архивные прогнозы погоды, доступные на момент выпуска, и выдаёт почасовой прогноз выработки на 48 ч с интервалом p10–p90, пересчитывая его при обновлении прогона · Трек: Энергетика · ТЗ: `docs/TASK.md` · Требования и контракт: `docs/REQUIREMENTS.md`
 
 ## Время (жёстко)
 - 13:00 старт · push каждые ≤30 мин и **обязательно до :50 каждого часа** (почасовой результат, п. 5.4.8)
@@ -10,9 +10,9 @@
 ## Стек и команды
 <!-- stack:py -->
 Python 3.12 · uv · FastAPI · pydantic · pandas · pytest · `openai` (OpenAI-совместимый клиент)
-- установка `uv sync` · запуск `uv run uvicorn app.main:app --reload --port 8000` · CLI `uv run python -m app.cli data/sample.json`
+- установка `uv sync` · запуск `uv run uvicorn app.main:app --reload --port 8000` · CLI `uv run python -m app.cli forecast --issue 2026-01-31`
 - **проверка:** `uv run ruff check . && uv run pytest -q`
-- ядро `app/core.py` (rule-based) · LLM `app/llm.py` · оркестрация `app/service.py` · **контракт** `app/schemas.py` · ПДн `app/pii.py` · метрики `uv run python -m app.evaluate data/labeled.json` · API `app/main.py` · UI `static/index.html`
+- **контракт** `app/schemas.py` + `app/config.py` · агент `app/agent/` (orchestrator, tools, log, llm_planner) · LLM `app/llm.py` · данные/признаки/модели `app/data.py`, `app/features.py`, `app/models.py`, `app/train.py`, `app/evaluate.py` · погода `app/weather.py` · API `app/main.py` + `app/api/routes.py` · UI `static/index.html` · CLI `uv run python -m app.cli backtest`
 <!-- /stack:py -->
 
 ## Команда: у каждого свой агент, все пушат в один `main`
@@ -47,7 +47,7 @@ Python 3.12 · uv · FastAPI · pydantic · pandas · pytest · `openai` (OpenAI
 4. Чужие данные, код, модели — запиши в свой `docs/tasks/<id>.md` → владелец README внесёт в «Заимствования» с лицензией (п. 5.4.4).
 5. Зависимости добавляет только лид. Ничего тяжёлого ради мелочи.
 6. README — на русском (инструкция организаторов), UI — на языке ТЗ (по умолчанию русский). Код, имена и коммиты — английский.
-7. Ошибки LLM и сети не роняют сценарий: таймаут, валидация схемы, фолбэк. Персональные данные в LLM не уходят: любой новый вызов модели — только через `maskPII` / `mask_pii`.
+7. Ошибки LLM и сети не роняют сценарий: таймаут, валидация схемы, фолбэк. Персональных данных в этой задаче нет (только ряды ВЭС); в LLM уходят только агрегаты и метрики, не сырые файлы.
 8. Никакого текста, адресованного AI-судье или проверяющим моделям, — только честная документация.
 9. После 16:30 — только фиксы, тесты, README. Новые фичи запрещены.
 10. UI проверяй в браузере через дерево элементов (найти → кликнуть по ссылке на элемент), а не по скриншотам и координатам; скриншот — только для визуальной оценки.

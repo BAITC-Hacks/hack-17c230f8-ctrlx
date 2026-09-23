@@ -1,49 +1,26 @@
-"""Analysis orchestration: try the LLM, fall back to rule-based analysis."""
+"""Entry points shared by the CLI and the API: one issue, a sequential backtest, LLM on/off."""
 
-from pydantic import BaseModel, Field
+from datetime import date, timedelta
 
-from app.core import analyze_rule_based
-from app.llm import complete_json, llm_mode
-from app.pii import mask_pii
-from app.schemas import AnalyzeInput, AnalyzeResult
-
-SYSTEM_PROMPT = (
-    "Ты - ассистент, который анализирует текст пользователя и возвращает "
-    "строго JSON-объект без пояснений и markdown со следующими полями: "
-    '"label" (строка - краткая категория текста), '
-    '"score" (число от 0 до 1 - уверенность в категории), '
-    '"summary" (одно-два предложения на русском языке с кратким резюме), '
-    '"reasons" (список строк - краткие причины, на которых основана оценка).'
-)
+from app.agent.orchestrator import run_issue
+from app.config import TEST_ISSUE_FIRST, TEST_ISSUE_LAST
+from app.schemas import ForecastIssue
 
 
-class _LlmAnalysis(BaseModel):
-    """AnalyzeResult content fields, minus the mode/fallback_reason bookkeeping."""
+def forecast(issue_date: date, *, refresh: bool = False, llm: bool = False) -> ForecastIssue:
+    if llm:
+        from app.agent.llm_planner import run_issue_llm  # optional: needs LLM_API_KEY
 
-    label: str
-    score: float = Field(ge=0, le=1)
-    summary: str
-    reasons: list[str]
+        return run_issue_llm(issue_date, refresh=refresh)
+    return run_issue(issue_date, refresh=refresh)
 
 
-def analyze(inp: AnalyzeInput) -> AnalyzeResult:
-    if llm_mode() == "demo":
-        return analyze_rule_based(inp)
-
-    # Kazakhstan personal-data law: PII must never reach an external LLM.
-    masked_text, found = mask_pii(inp.text)
-    masked_count = sum(found.values())
-
-    llm_result = complete_json(_LlmAnalysis, SYSTEM_PROMPT, masked_text)
-    if llm_result is None:
-        fallback = analyze_rule_based(inp)
-        return fallback.model_copy(update={"fallback_reason": "llm_failed"})
-
-    return AnalyzeResult(
-        label=llm_result.label,
-        score=llm_result.score,
-        summary=llm_result.summary,
-        reasons=llm_result.reasons,
-        mode="llm",
-        masked_pii=masked_count,
-    )
+def backtest(
+    start: date = TEST_ISSUE_FIRST, end: date = TEST_ISSUE_LAST, *, refresh: bool = False
+) -> list[ForecastIssue]:
+    issues: list[ForecastIssue] = []
+    d = start
+    while d <= end:
+        issues.append(forecast(d, refresh=refresh))
+        d += timedelta(days=1)
+    return issues

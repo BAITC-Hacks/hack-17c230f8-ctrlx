@@ -4,11 +4,10 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.api.routes import router as api_router
 from app.llm import llm_mode
-from app.schemas import AnalyzeInput, AnalyzeResult
-from app.service import analyze
 
-app = FastAPI(title="CtrlX · HackAlem")
+app = FastAPI(title="CtrlX · WindCast Agent")
 
 
 @app.get("/api/health")
@@ -16,10 +15,7 @@ def health() -> dict:
     return {"ok": True, "mode": llm_mode(), "commit": os.getenv("COMMIT", "dev")}
 
 
-@app.post("/api/analyze", response_model=AnalyzeResult)
-def api_analyze(inp: AnalyzeInput) -> AnalyzeResult:
-    return analyze(inp)
-
+app.include_router(api_router, prefix="/api")
 
 # Resolved relative to this file (not the cwd) so `static/` is found no matter
 # where `uvicorn app.main:app` is launched from.

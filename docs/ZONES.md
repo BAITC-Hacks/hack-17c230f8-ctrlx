@@ -16,3 +16,6 @@ MEMBER: amirkhan Амирхан advertising20240-hiii 248465019
 MEMBER: ansar Ансар ansarchik17 185749198
 LEAD: mustafa
 ALL: docs/PROGRESS.md
+mustafa: app/agent/ app/schemas.py app/config.py app/service.py app/main.py app/cli.py app/llm.py app/console.py app/__init__.py app/api/__init__.py AGENTS.md CLAUDE.md docs/REQUIREMENTS.md docs/ZONES.md docs/TASK.md docs/PREPARED.md pyproject.toml uv.lock requirements.txt .env.example Dockerfile runs/ outputs/forecasts/
+amirkhan: app/data.py app/features.py app/models.py app/train.py app/evaluate.py data/raw/ data/processed/ models/ outputs/metrics/ docs/METRICS.md tests/test_data.py tests/test_models.py
+ansar: app/weather.py app/api/routes.py data/weather_cache/ static/ tests/test_weather.py tests/test_api.py tests/test_cli.py README.md docs/TESTING.md scripts/smoke.sh

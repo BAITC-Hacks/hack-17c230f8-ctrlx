@@ -13,18 +13,10 @@ def test_health_reports_demo_mode_without_key(monkeypatch):
     assert body == {"ok": True, "mode": "demo", "commit": "dev"}
 
 
-def test_analyze_valid_text_returns_200():
-    response = client.post("/api/analyze", json={"text": "Пример текста"})
+def test_issues_endpoint_returns_list():
+    response = client.get("/api/issues")
     assert response.status_code == 200
-    body = response.json()
-    assert body["mode"] in ("llm", "demo")
-    assert 0 <= body["score"] <= 1
-    assert isinstance(body["reasons"], list)
-
-
-def test_analyze_empty_text_returns_422():
-    response = client.post("/api/analyze", json={"text": ""})
-    assert response.status_code == 422
+    assert isinstance(response.json(), list)
 
 
 def test_index_page_served_as_html():

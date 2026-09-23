@@ -5,10 +5,13 @@ description = "CtrlX — HackAlem AI"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.141.1",
+    "lightgbm>=4.7.0",
     "openai>=3.17.0",
     "pandas>=3.0.6",
+    "pyarrow>=25.0.1",
     "pydantic>=2.13.5",
     "python-dotenv>=1.2.3",
+    "scikit-learn>=1.9.1",
     "uvicorn[standard]>=0.53.0",
 ]
 

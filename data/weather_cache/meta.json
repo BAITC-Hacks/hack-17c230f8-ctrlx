@@ -1,0 +1,8 @@
+{
+  "source": "Open-Meteo Previous Runs API (https://open-meteo.com/en/docs/previous-runs-api)",
+  "url": "https://previous-runs-api.open-meteo.com/v1/forecast?latitude=43.645150&longitude=78.535604&wind_speed_unit=ms&timezone=GMT&hourly=wind_speed_100m_previous_day1,wind_speed_100m_previous_day2,wind_direction_100m_previous_day2,temperature_2m_previous_day2,wind_gusts_10m_previous_day2&start_date=2024-02-15&end_date=2026-02-28",
+  "model": "best_match",
+  "fetched_at": "2026-09-23T13:33:00+05:00",
+  "timezone": "GMT",
+  "note": "initial cache; to be replaced by a fetch with previous_day1..3 for wind_speed_100m/10m and gfs_seamless (R2)"
+}
