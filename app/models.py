@@ -3,7 +3,6 @@ with conformal (CQR) calibration, persistence and climatology baselines."""
 
 from dataclasses import dataclass, field
 
-import lightgbm as lgb
 import numpy as np
 import pandas as pd
 
@@ -11,17 +10,15 @@ from app.config import LOCAL_TZ, MAX_PREVIOUS_DAY
 from app.features import FEATURES, add_features
 
 # Fixed before any hold-out check, never tuned on test months.
+# scikit-learn's histogram GBM: same algorithm family as LightGBM, but its wheels ship their own
+# OpenMP runtime, so it runs on a clean macOS without Homebrew libomp (LightGBM's wheel needs it).
 GBM_PARAMS = dict(
     learning_rate=0.03,
-    n_estimators=500,
-    num_leaves=15,
-    min_child_samples=50,
-    subsample=0.8,
-    subsample_freq=1,
-    colsample_bytree=0.8,
-    verbose=-1,
+    max_iter=500,
+    max_leaf_nodes=15,
+    min_samples_leaf=50,
+    early_stopping=False,
     random_state=0,
-    n_jobs=4,
 )
 CQR_DAYS = 60
 COVERAGE = 0.8
@@ -98,10 +95,11 @@ class WindCastModel:
 
 
 def fit_gbm(x: pd.DataFrame, y: pd.Series, objective: str, alpha: float | None = None):
-    kw = {"objective": objective}
-    if alpha is not None:
-        kw["alpha"] = alpha
-    return lgb.LGBMRegressor(**GBM_PARAMS, **kw).fit(x[FEATURES], y)
+    from sklearn.ensemble import HistGradientBoostingRegressor
+
+    loss = {"regression_l1": "absolute_error", "quantile": "quantile"}[objective]
+    kw = {"loss": loss, **({"quantile": alpha} if alpha is not None else {})}
+    return HistGradientBoostingRegressor(**GBM_PARAMS, **kw).fit(x[FEATURES], y)
 
 
 def fit_curves(hist: pd.DataFrame, target: str) -> dict:

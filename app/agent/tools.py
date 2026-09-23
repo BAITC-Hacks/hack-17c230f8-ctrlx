@@ -96,7 +96,7 @@ def source_shift(wx: pd.DataFrame, t0: pd.Timestamp) -> dict:
     return {"recent_mean_ws": round(float(recent), 2), "train_mean_ws": round(float(train), 2)}
 
 
-@tool("Run a model: gbm (LightGBM + CQR), power_curve, climatology or gfs_power_curve")
+@tool("Run a model: gbm (gradient boosting + CQR), power_curve, climatology or gfs_power_curve")
 def run_model(sel: pd.DataFrame, model_name: str) -> pd.DataFrame:
     if model_name == "gfs_power_curve":
         out = pd.DataFrame({"target": sel["target"].to_numpy(), "lead": sel["lead"].to_numpy()})
