@@ -25,3 +25,4 @@
 - 15:32 · mustafa · Мустафа · contract: ask-the-agent (AskRequest/AskAnswer), second LLM provider as fallback, JSON extraction for NIM endpoints; zone app/ask.py -> amirkhan (R9) · тесты: pass
 - 15:33 · ansar · Ансар · fix(api): read path no longer imports the model stack, so API and page survive a missing OpenMP runtime (R6, R8) · тесты: FAIL
 - 15:36 · mustafa · Мустафа · agent evidence: January 2026 replay (ablation + decision ledger with bootstrap CI), fault injection (agent survives 4/4 broken inputs); fix empty-source and no-weather crashes (R5, R7) · тесты: pass
+- 15:36 · mustafa · Мустафа · docs: SOLUTION.md section 9 with replay ablation, decision ledger and fault-injection results (R5) · тесты: pass
