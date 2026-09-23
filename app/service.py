@@ -9,7 +9,17 @@ from app.config import FEBRUARY_PATH, OUTPUTS_FORECASTS, TEST_ISSUE_FIRST, TEST_
 from app.schemas import ForecastIssue
 
 
-def forecast(issue_date: date, *, refresh: bool = False, llm: bool = False) -> ForecastIssue:
+def forecast(
+    issue_date: date, *, refresh: bool = False, llm: bool = False, demo_dir=None
+) -> ForecastIssue:
+    if demo_dir is not None:  # e.g. runs/llm_demo: keep the committed test outputs untouched
+        return run_issue(
+            issue_date,
+            refresh=refresh,
+            llm=llm,
+            out_dir=demo_dir / "forecasts",
+            runs_dir=demo_dir / "runs",
+        )
     return run_issue(issue_date, refresh=refresh, llm=llm)
 
 

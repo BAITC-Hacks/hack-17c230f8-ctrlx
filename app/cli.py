@@ -10,6 +10,7 @@ import argparse
 import json
 import sys
 from datetime import date
+from pathlib import Path
 
 from app.config import TEST_ISSUE_FIRST, TEST_ISSUE_LAST
 from app.console import use_utf8
@@ -22,7 +23,10 @@ def _parser() -> argparse.ArgumentParser:
     f = sub.add_parser("forecast", help="one issue")
     f.add_argument("--issue", type=date.fromisoformat, required=True, help="observation day D")
     f.add_argument("--refresh", action="store_true", help="call Open-Meteo instead of the cache")
-    f.add_argument("--llm", action="store_true", help="LLM planner (needs LLM_API_KEY)")
+    f.add_argument("--llm", action="store_true", help="LLM dispatcher summary (needs LLM_API_KEY)")
+    f.add_argument(
+        "--demo-dir", type=Path, default=None, help="write outputs here, e.g. runs/llm_demo"
+    )
 
     b = sub.add_parser("backtest", help="sequential issues")
     b.add_argument("--from", dest="start", type=date.fromisoformat, default=TEST_ISSUE_FIRST)
@@ -49,7 +53,7 @@ def main(argv: list[str]) -> int:
         if args.cmd == "forecast":
             from app.service import forecast
 
-            issue = forecast(args.issue, refresh=args.refresh, llm=args.llm)
+            issue = forecast(args.issue, refresh=args.refresh, llm=args.llm, demo_dir=args.demo_dir)
             print(issue.summary)
             print(f"\nrun_id={issue.run_id} rows={len(issue.rows)} warnings={len(issue.warnings)}")
         elif args.cmd == "backtest":
