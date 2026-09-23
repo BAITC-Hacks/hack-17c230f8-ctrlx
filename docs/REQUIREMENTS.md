@@ -14,13 +14,13 @@
 ## Требования
 | R-ID | Приоритет | Требование (из ТЗ) | Приёмка: вход → ожидаемый выход | Владелец | Статус |
 |---|---|---|---|---|---|
-| R1 | must | Загрузка исторических данных двух турбин, приведение к часам, флаги простоя и дыр, время Asia/Almaty → UTC | `data/raw/*.csv` → `data/processed/hourly.parquet` по `HOURLY_COLUMNS`, ~25 000 часов × 2 турбины, лог допущений в stdout | mustafa | ✅ |
+| R1 | must | Загрузка исторических данных двух турбин, приведение к часам, флаги простоя и дыр, время SCADA (фиксированный UTC+5) → UTC | `data/raw/*.csv` → `data/processed/hourly.parquet` по `HOURLY_COLUMNS`, ~25 000 часов × 2 турбины, лог допущений в stdout | mustafa | ✅ |
 | R2 | must | Агент сам получает по координатам архивные прогнозы (Open-Meteo Previous Runs), кэш-first, правило day1/day2/day3 против утечки | `app.weather.load_or_fetch()` → `WEATHER_COLUMNS`; `select_for_issue(wx, t0, hours_since_issue)` → `ISSUE_WEATHER_COLUMNS`; `tests/test_weather.py` проверяет, что для каждой строки `safe_previous_day(lead)` ≤ выбранного N | amirkhan | ✅ (обе координаты и живая сверка — в работе) |
-| R3 | must | Модель почасовой выработки: B0 персистентность, B1 кривая мощности на прогнозном ветре (MOS), M1 GBM с квантилями p10/p90; обучение на данных до 31.01.2026 | `uv run python -m app.cli train` → `models/*.pkl` ≤ 50 МБ; `app.models.predict(model_name, features)` → power_t1, power_t2, p10, p90 | mustafa | ✅ |
+| R3 | must | Модель почасовой выработки: B0 персистентность, B1 кривая мощности на прогнозном ветре (MOS), M1 GBM с квантилями p10/p90; обучение на данных до 31.01.2026 | `uv run python -m app.cli train` → `models/*.pkl` ≤ 50 МБ; `WindCastModel.predict(frame, model_name)` → power_t1, power_t2, p10, p90 | mustafa | ✅ |
 | R4 | must | Ретроспектива: выпуск на 31.01, 01.02, … 27.02, каждый на 24–48 ч почасово | `backtest` → 28 файлов `outputs/forecasts/issue_YYYY-MM-DD.csv` (48 строк rev0) + `february_2026.csv` | mustafa | ✅ |
 | R5 | must | Agentic-цикл: получение погоды → подготовка → модель → почасовой прогноз → анализ → повторный расчёт при обновлении входных данных; работает без ключей | `runs/<run_id>/agent_log.jsonl` + `report.md` на каждый выпуск; в логе есть `validate_weather`, `analyze`, `recompute_if_updated` с `decision`/`reason`; хотя бы один выпуск с `fallback_used` или пересчётом | mustafa | ✅ |
 | R6 | must | README и воспроизводимость: запуск в 3 команды без ключей, macOS и Windows, тесты, smoke | чистый clone → `uv sync && uv run python -m app.cli backtest` < 5 мин; `scripts/smoke.sh` PASS | ansar | 🚧 |
-| R7 | should | Метрики на отложенных периодах (январь 2026, февраль 2025) против B0/B1 | `uv run python -m app.cli evaluate --holdout 2026-01` → `outputs/metrics/holdout_2026-01.json` (`MetricsReport`), таблица в `docs/METRICS.md` | mustafa | ✅ |
+| R7 | should | Метрики на отложенных периодах (январь 2026, февраль 2025) против B0/B1 | `uv run python -m app.cli evaluate --holdout 2026-01` → `outputs/metrics/holdout_2026-01.json` (`MetricsReport`), таблица в README и `docs/SOLUTION.md` | mustafa | ✅ |
 | R8 | should | Страница: выбор выпуска, график p50 + p10–p90 + B1, лента шагов агента, таблица метрик; API по контракту | `GET /api/issues`, `/api/forecast/{date}`, `/api/metrics`, `/api/runs/{id}/log`, `POST /api/run`; `static/index.html` | ansar | 🚧 |
 | R9 | could | LLM-планировщик и сводка диспетчеру (RU) на тех же tools; реальный прогон в репо | `forecast --llm` при `LLM_API_KEY` → лог с `llm != null`; `runs/llm_demo/` закоммичен | mustafa | 🚧 (код готов, нужен ключ; «Спросить агента» в работе) |
 | R10 | could | Второй источник NWP (`gfs_seamless`): разброс как неопределённость, фолбэк при провале валидации | `wx_model` в CSV, решение в логе | amirkhan (загрузка, идея) / mustafa (агент) | ✅ (запасной источник и флаг расхождения в агенте) |
@@ -69,7 +69,7 @@
 - Не делаем: Next.js, Supabase, обучение на historical-forecast 2023, парк из N турбин, деплой (только если лид успеет после 16:30).
 
 ## Стек
-`py`: FastAPI + pandas + pydantic + scikit-learn + lightgbm + pyarrow (все в `uv.lock`). Данные, ML и пакетный прогон — Python; UI — одна статическая страница с Chart.js (cdnjs).
+`py`: FastAPI + pandas + pydantic + scikit-learn (HistGradientBoosting из scikit-learn) + pyarrow (все в `uv.lock`). Данные, ML и пакетный прогон — Python; UI — одна статическая страница с Chart.js (cdnjs).
 
 ## Владение
 | Поток | Кто | Почему он |

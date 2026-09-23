@@ -42,3 +42,4 @@
 - 16:11 · ansar · Ансар · docs+ui: imbalance cost in tenge next to accuracy, TESTING log up to date (R6, R7, R8) · тесты: pass
 - 16:10 · amirkhan · Амирхан · feat(ask): ask-the-agent over run facts — template answers, LLM path with number grounding against the facts, tests (R9) · тесты: pass
 - 16:11 · mustafa · Мустафа · agent: weather step uses the real source (archive vs live), live check of the issue window by both turbines' coordinates (live_match on 10.02), grid cells in the log; committed live-check run (R2, R5) · тесты: pass
+- 16:12 · mustafa · Мустафа · docs: SOLUTION and REQUIREMENTS match the implementation after audit (live check, older run, gated rev1, ledger wording, metrics actually computed, 5 fault cases) (R5, R7) · тесты: pass
