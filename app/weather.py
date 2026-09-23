@@ -8,6 +8,7 @@ never a fresher one, so nothing from after t0 leaks into the forecast.
 
 import hashlib
 import json
+import os
 import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
@@ -59,12 +60,27 @@ def fetch_previous_runs(
     with urllib.request.urlopen(url, timeout=timeout) as resp:  # fixed https endpoint
         raw = resp.read()
     payload = json.loads(raw)
-    if "hourly" not in payload:
-        raise ValueError(f"Open-Meteo returned no hourly data: {payload.get('reason', payload)}")
+    _check_payload(payload)
     config.WEATHER_CACHE.mkdir(parents=True, exist_ok=True)
-    cache_path(model).write_bytes(raw)
+    # atomic: a failed download must never leave a half-written cache behind
+    tmp = cache_path(model).with_suffix(".tmp")
+    tmp.write_bytes(raw)
+    os.replace(tmp, cache_path(model))
     _update_meta(model, url, raw, start, end)
     return payload
+
+
+# "no usable answer from Open-Meteo": network/HTTP/timeout (OSError), bad JSON or empty payload
+_FETCH_ERRORS = (OSError, ValueError)
+
+
+def _check_payload(payload) -> None:
+    """Reject API errors and empty answers before anything is written to the cache."""
+    items = payload if isinstance(payload, list) else [payload]
+    for item in items:
+        if not isinstance(item, dict) or not item.get("hourly", {}).get("time"):
+            reason = item.get("reason", "no hourly data") if isinstance(item, dict) else item
+            raise ValueError(f"Open-Meteo returned no usable data: {reason}")
 
 
 def _update_meta(model: str, url: str, raw: bytes, start: str, end: str) -> None:
@@ -104,21 +120,34 @@ def to_frame(payload: dict) -> pd.DataFrame:
 
 
 def load_or_fetch(model: str = "best_match", refresh: bool = False) -> pd.DataFrame:
-    """Cache first; fetch only on refresh or without cache. Offline never raises."""
+    """Cache first; fetch only on refresh or without cache.
+
+    A failed fetch falls back to the cache (attrs["source"] = "cache" | "live"). Without any
+    cache the error is explicit — an empty frame would surface later as a cryptic ValidationError.
+    """
     path = cache_path(model)
+    reason = None
     if refresh or not path.exists():
         try:
             df = to_frame(fetch_previous_runs(model))
-            df.attrs["model"] = model
+            df.attrs.update(model=model, source="live")
             return df
-        except Exception:  # network down / API error: fall back to whatever is cached
-            pass
-    if path.exists():
-        df = to_frame(json.loads(path.read_text(encoding="utf-8")))
-    else:
-        df = pd.DataFrame({c: pd.Series(dtype="float64") for c in WEATHER_COLUMNS})
-        df["time_utc"] = pd.to_datetime(df["time_utc"], utc=True)
-    df.attrs["model"] = model
+        except _FETCH_ERRORS as exc:  # network down / API error: use the committed cache
+            reason = f"{type(exc).__name__}: {exc}"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"weather cache {path} is missing and Open-Meteo is unreachable ({reason}); "
+            f"run load_or_fetch({model!r}, refresh=True) with network access"
+        )
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError(
+            f"weather cache {path} is unreadable ({exc}); delete it and run "
+            f"load_or_fetch({model!r}, refresh=True)"
+        ) from exc
+    df = to_frame(payload)
+    df.attrs.update(model=model, source="cache")
     return df
 
 
@@ -133,6 +162,13 @@ def select_for_issue(
     """
     t0 = pd.Timestamp(issue_time_utc)
     t0 = t0.tz_localize("UTC") if t0.tzinfo is None else t0.tz_convert("UTC")
+    last = t0 + pd.Timedelta(hours=config.HORIZON_H - 1)
+    if wx.empty or t0 < wx["time_utc"].min() or last > wx["time_utc"].max():
+        covered = "nothing" if wx.empty else f"{wx['time_utc'].min()}..{wx['time_utc'].max()}"
+        raise ValueError(
+            f"weather cache covers {covered}, issue window {t0}..{last} is outside it; "
+            "run load_or_fetch(refresh=True) or extend START_DATE/END_DATE"
+        )
     wx_model = model or wx.attrs.get("model", "best_match")
     by_time = wx.set_index("time_utc")
     rows = []

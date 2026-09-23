@@ -2,6 +2,7 @@
 
 import json
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -39,13 +40,69 @@ def test_offline_load_does_not_fetch(monkeypatch, wx):
     assert len(df) == len(wx)
 
 
-def test_offline_without_cache_returns_empty_frame(monkeypatch, tmp_path):
+def test_offline_without_cache_raises_a_clear_error(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "WEATHER_CACHE", tmp_path)
     monkeypatch.setattr(
         weather.urllib.request, "urlopen", lambda *a, **k: (_ for _ in ()).throw(OSError())
     )
-    df = weather.load_or_fetch("best_match")
-    assert df.empty and list(df.columns) == WEATHER_COLUMNS
+    with pytest.raises(FileNotFoundError, match="refresh=True"):
+        weather.load_or_fetch("best_match")
+
+
+def test_corrupted_cache_raises_a_clear_error(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "WEATHER_CACHE", tmp_path)
+    weather.cache_path("best_match").write_text("{not json", encoding="utf-8")
+    with pytest.raises(ValueError, match="unreadable"):
+        weather.load_or_fetch("best_match")
+
+
+def test_load_marks_its_source(wx):
+    assert wx.attrs["source"] == "cache" and wx.attrs["model"] == "best_match"
+
+
+def test_issue_outside_cache_window_raises(wx):
+    with pytest.raises(ValueError, match="outside"):
+        weather.select_for_issue(wx, pd.Timestamp("2023-06-01", tz="UTC"))
+
+
+def _synthetic(t0: pd.Timestamp) -> pd.DataFrame:
+    """Every value encodes its run and lead: ws100_dN = 100N + lead, ws10_dN = 10N + lead."""
+    lead = np.arange(config.HORIZON_H)
+    wx = pd.DataFrame({"time_utc": pd.date_range(t0, periods=config.HORIZON_H, freq="h")})
+    for n in (1, 2, 3):
+        wx[f"ws100_d{n}"] = 100 * n + lead
+        wx[f"ws10_d{n}"] = 10 * n + lead
+    wx["dir100_d2"], wx["temp2m_d2"], wx["gust10_d2"] = 200 + lead, 20 + lead, 2 + lead
+    return wx[WEATHER_COLUMNS]
+
+
+@pytest.mark.parametrize("hours_since_issue", [0, config.INTRADAY_REFRESH_H])
+@pytest.mark.parametrize("day", range(28))
+def test_values_come_from_the_safe_run_only(day, hours_since_issue):
+    """Value-level leak test: not just the day1/2/3 label, the numbers must come from that run."""
+    t0 = T0_FIRST + pd.Timedelta(days=day)
+    sel = weather.select_for_issue(_synthetic(t0), t0, hours_since_issue, model="test")
+    last_safe = max(
+        lead
+        for lead in range(config.HORIZON_H)
+        if config.safe_previous_day(lead, hours_since_issue) <= 2
+    )
+    columns = ["lead_h", "wx_field", "ws100", "ws10", "temp2m"]
+    for lead, field, ws100, ws10, temp in sel[columns].itertuples(index=False):
+        n = config.safe_previous_day(lead, hours_since_issue)
+        assert field == f"day{n}"
+        assert ws100 == 100 * n + lead  # the value of exactly that run, never a fresher one
+        assert ws10 == 10 * n + lead  # ws10 from the same run as ws100
+        assert temp == 20 + min(lead, last_safe)  # day2-only fields are carried backward only
+
+
+def test_missing_safe_run_falls_back_to_older_never_fresher():
+    wx, lead = _synthetic(T0_FIRST), 20  # lead 20 -> day2 is the safe run
+    assert config.safe_previous_day(lead) == 2
+    wx.loc[lead, "ws100_d2"] = float("nan")
+    sel = weather.select_for_issue(wx, T0_FIRST, model="test")
+    assert sel.loc[lead, "wx_field"] == "day3"
+    assert sel.loc[lead, "ws100"] == 300 + lead and sel.loc[lead, "ws10"] == 30 + lead
 
 
 @pytest.mark.parametrize("hours_since_issue", [0, config.INTRADAY_REFRESH_H])
