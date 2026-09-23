@@ -46,7 +46,7 @@ ISSUE_WEATHER_COLUMNS = [
 
 WxField = Literal["day1", "day2", "day3"]
 Horizon = Literal["24h", "48h"]
-ModelName = Literal["persistence", "power_curve", "gbm"]
+ModelName = Literal["persistence", "power_curve", "gbm", "climatology"]
 
 
 # --- forecast (outputs/forecasts/issue_YYYY-MM-DD.csv, february_2026.csv) -----------------------
@@ -126,6 +126,7 @@ class MetricsReport(BaseModel):
     train_end: date
     rows: list[MetricRow]
     created_at: datetime
+    extras: dict = Field(default_factory=dict, description="coverage, recompute effect, KPIs")
 
 
 # --- API ------------------------------------------------------------------------------------------

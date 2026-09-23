@@ -1,0 +1,167 @@
+{
+  "period": "2025-02",
+  "train_end": "2025-01-31",
+  "rows": [
+    {
+      "model": "persistence",
+      "horizon": "24h",
+      "mae": 0.3202,
+      "rmse": 0.3903,
+      "nmae": 32.02,
+      "bias": 0.0052,
+      "skill_vs_persistence": 0.0,
+      "skill_vs_power_curve": -0.533,
+      "n": 666
+    },
+    {
+      "model": "climatology",
+      "horizon": "24h",
+      "mae": 0.3278,
+      "rmse": 0.363,
+      "nmae": 32.78,
+      "bias": 0.1191,
+      "skill_vs_persistence": -0.024,
+      "skill_vs_power_curve": -0.569,
+      "n": 666
+    },
+    {
+      "model": "power_curve",
+      "horizon": "24h",
+      "mae": 0.2089,
+      "rmse": 0.2581,
+      "nmae": 20.89,
+      "bias": 0.0079,
+      "skill_vs_persistence": 0.348,
+      "skill_vs_power_curve": 0.0,
+      "n": 666
+    },
+    {
+      "model": "gbm",
+      "horizon": "24h",
+      "mae": 0.1796,
+      "rmse": 0.2504,
+      "nmae": 17.96,
+      "bias": 0.024,
+      "skill_vs_persistence": 0.439,
+      "skill_vs_power_curve": 0.14,
+      "n": 666
+    },
+    {
+      "model": "persistence",
+      "horizon": "48h",
+      "mae": 0.3576,
+      "rmse": 0.4272,
+      "nmae": 35.76,
+      "bias": 0.0036,
+      "skill_vs_persistence": 0.0,
+      "skill_vs_power_curve": -0.741,
+      "n": 642
+    },
+    {
+      "model": "climatology",
+      "horizon": "48h",
+      "mae": 0.3253,
+      "rmse": 0.361,
+      "nmae": 32.53,
+      "bias": 0.1169,
+      "skill_vs_persistence": 0.091,
+      "skill_vs_power_curve": -0.583,
+      "n": 642
+    },
+    {
+      "model": "power_curve",
+      "horizon": "48h",
+      "mae": 0.2055,
+      "rmse": 0.2547,
+      "nmae": 20.55,
+      "bias": -0.0053,
+      "skill_vs_persistence": 0.426,
+      "skill_vs_power_curve": 0.0,
+      "n": 642
+    },
+    {
+      "model": "gbm",
+      "horizon": "48h",
+      "mae": 0.1752,
+      "rmse": 0.2437,
+      "nmae": 17.52,
+      "bias": 0.015,
+      "skill_vs_persistence": 0.51,
+      "skill_vs_power_curve": 0.148,
+      "n": 642
+    },
+    {
+      "model": "persistence",
+      "horizon": "all",
+      "mae": 0.3386,
+      "rmse": 0.4088,
+      "nmae": 33.86,
+      "bias": 0.0044,
+      "skill_vs_persistence": 0.0,
+      "skill_vs_power_curve": -0.634,
+      "n": 1308
+    },
+    {
+      "model": "climatology",
+      "horizon": "all",
+      "mae": 0.3266,
+      "rmse": 0.362,
+      "nmae": 32.66,
+      "bias": 0.118,
+      "skill_vs_persistence": 0.035,
+      "skill_vs_power_curve": -0.576,
+      "n": 1308
+    },
+    {
+      "model": "power_curve",
+      "horizon": "all",
+      "mae": 0.2072,
+      "rmse": 0.2564,
+      "nmae": 20.72,
+      "bias": 0.0014,
+      "skill_vs_persistence": 0.388,
+      "skill_vs_power_curve": 0.0,
+      "n": 1308
+    },
+    {
+      "model": "gbm",
+      "horizon": "all",
+      "mae": 0.1774,
+      "rmse": 0.2471,
+      "nmae": 17.74,
+      "bias": 0.0195,
+      "skill_vs_persistence": 0.476,
+      "skill_vs_power_curve": 0.144,
+      "n": 1308
+    }
+  ],
+  "created_at": "2026-09-23T10:21:01.719418Z",
+  "extras": {
+    "issues": 28,
+    "interval_p10_p90": {
+      "coverage": 0.846,
+      "mean_width": 0.596,
+      "cqr_qhat": 0.0315
+    },
+    "recompute_t0_plus_12h": {
+      "pairs": 919,
+      "mae_rev0": 0.1713,
+      "mae_rev1": 0.1686,
+      "changed_field_pairs": 520,
+      "mae_rev0_changed": 0.1822,
+      "mae_rev1_changed": 0.1776
+    },
+    "regulator_kpi_gbm": {
+      "within_5pct": 0.073,
+      "within_20pct": 0.183,
+      "within_30pct": 0.256
+    },
+    "imbalance_cost_upper_bound_mln_tg": {
+      "assumptions": "5.0 MW, 22.68 tg/kWh, penalty 0.3 x price for every kWh (all hours outside +-5 %), new-contract regime",
+      "persistence": 7.67,
+      "power_curve": 4.69,
+      "gbm": 4.02
+    },
+    "accuracy_1_minus_nmae_gbm": 0.823
+  }
+}

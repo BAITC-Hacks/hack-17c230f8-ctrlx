@@ -15,3 +15,4 @@
 - 15:15 · mustafa · Мустафа · docs: SOLUTION.md architecture and logic; data loader (fixed UTC+5 clock); publish delay 7 h per measured ECMWF availability (R1, R2, R5) · тесты: pass
 - 15:16 · ansar · Ансар · docs: README, TESTING and smoke for the wind-farm case (R6) · тесты: pass
 - 15:17 · mustafa · Мустафа · docs: SOLUTION.md — bid alignment (D+2 = day-ahead bid before 08:00), poison leak test, decision ledger, regulator KPIs (R5, R7) · тесты: pass
+- 15:21 · mustafa · Мустафа · models: leak-safe issue simulation, power curve per field, LightGBM median + CQR quantiles; train and hold-out evaluate (Jan-2026 nMAE 15.4%, Feb-2025 17.7%) (R3, R7) · тесты: pass
