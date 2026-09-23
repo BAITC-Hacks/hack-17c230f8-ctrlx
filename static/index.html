@@ -158,6 +158,11 @@
   .abl-v { font-family: var(--mono); font-size: 14px; font-weight: 600; }
   @media (max-width: 700px) { .abl-row { grid-template-columns: 1fr auto; } .abl-bar { display: none; } }
 
+  .scroll { overflow-x: auto; }
+  details { margin-top: 12px; }
+  summary { cursor: pointer; font-weight: 600; }
+  #issue-status { margin-bottom: 16px; }
+  #issue-status[data-state="review"], #issue-status[data-state="fallback"] { border-left: 4px solid var(--warn); }
   .empty { color: var(--ink-faint); font-size: 14px; }
   .err { color: var(--fail); font-size: 14px; }
 
@@ -181,11 +186,13 @@
   <div class="issuebar">
     <label for="issue">Выпуск</label>
     <button class="step-btn" id="prev" aria-label="Предыдущий выпуск">←</button>
-    <select id="issue"></select>
+    <select id="issue" aria-label="Дата выпуска"></select>
     <button class="step-btn" id="next" aria-label="Следующий выпуск">→</button>
+    <button id="export" disabled>Скачать CSV · все ревизии</button>
     <div class="issue-meta" id="issue-meta"></div>
   </div>
 
+  <div class="card" id="issue-status" role="status" aria-live="polite">Загрузка выпусков…</div>
   <section class="card" aria-labelledby="ch-h">
     <h2 id="ch-h">Ожидаемая выработка <span>% от номинала, локальное время Алматы</span></h2>
     <div class="stats" id="stats"></div>
@@ -195,6 +202,8 @@
       <div class="tip" id="tip"></div>
     </div>
     <div class="legend" id="legend"></div>
+    <div id="revision-info"></div>
+    <details id="provenance" hidden><summary>Происхождение погоды по часам</summary><div id="provenance-body"></div></details>
   </section>
 
   <div class="cols">
@@ -249,6 +258,7 @@ const FRESH = {
 const FRESH_UNKNOWN = { label: "источник погоды неизвестен", fill: "var(--accent-faint)", hatch: true };
 
 let issues = [], idx = 0, rows = [], superseded = [], series = "power_farm";
+let requestId = 0, currentIssue = null;
 
 /** One row per target hour: the newest revision wins. Rows a later revision replaced are kept
  *  separately so the chart can show what the t0+12h recompute actually changed. */
@@ -370,7 +380,7 @@ function wireHover(x, y, val) {
     tip.innerHTML = `<b>${dm(r.target_time_local)} ${hhmm(r.target_time_local)}</b> · +${r.lead_h} ч
       <br>выработка <span class="num">${pct(val(r))}</span>${series === "power_farm"
         ? ` · p10–p90 <span class="num">${pct(+r.p10)}–${pct(+r.p90)}</span>` : ""}
-      <br>ветер <span class="num">${(+r.ws100_fc).toFixed(1)}</span> м/с · погода ${esc(r.wx_field)}
+      <br>ветер <span class="num">${r.ws100_fc == null ? "—" : (+r.ws100_fc).toFixed(1)}</span> м/с · погода ${esc(r.wx_field)}
       ${was ? `<br>до пересчёта было <span class="num">${pct(+was[series])}</span>` : ""}`;
     tip.style.left = `${(cx / W) * 100}%`;
     tip.style.top = `${(y(val(r)) / H) * box.height - 12}px`;
@@ -393,8 +403,8 @@ function renderStats() {
   $("stats").innerHTML = `
     <div><div class="stat-v">${pct(mean)}</div><div class="stat-l">среднее за 48 ч</div></div>
     <div><div class="stat-v">${pct(Math.max(...v))}</div><div class="stat-l">пик · ${dm(pk.target_time_local)} ${hhmm(pk.target_time_local)}</div></div>
-    <div><div class="stat-v">±${pct(width / 2)}</div><div class="stat-l">средняя неопределённость, по парку</div></div>
-    <div class="${calm ? "stat-warn" : ""}"><div class="stat-v">${calm} ч</div><div class="stat-l">штиль, ниже 10%</div></div>`;
+    <div><div class="stat-v">${(width * 100).toFixed(1)} п.п.</div><div class="stat-l">средняя ширина p10–p90 по парку</div></div>
+    <div class="${calm ? "stat-warn" : ""}"><div class="stat-v">${calm} ч</div><div class="stat-l">выработка ниже 10%</div></div>`;
 }
 
 function renderLegend() {
@@ -460,11 +470,11 @@ function money(r) {
   if (!c || c.gbm == null || c.persistence == null) return "";
   const saved = c.persistence - c.gbm;
   return `<p class="stat-l" style="margin:-6px 0 14px">
-    Плата за дисбаланс, верхняя оценка за период: персистентность
+    Сценарная стоимость отклонений за часы заявки: персистентность
     <b class="num">${c.persistence.toFixed(2)}</b> млн ₸ →
     модель <b class="num">${c.gbm.toFixed(2)}</b> млн ₸ —
-    <b style="color:var(--accent)">экономия ${saved.toFixed(2)} млн ₸</b>.
-    <span style="color:var(--ink-faint)">Допущения: ${esc(c.assumptions || "см. outputs/metrics")}</span></p>`;
+    <b style="color:var(--accent)">разница ${saved.toFixed(2)} млн ₸</b>.
+    <span style="color:var(--ink-faint)">Это не измеренная экономия. Допущения: ${esc(c.assumptions || "см. outputs/metrics")}</span></p>`;
 }
 
 function renderMetrics(reports) {
@@ -484,6 +494,10 @@ function renderMetrics(reports) {
 // The evidence JSON is written in English by the CLI; the page is Russian. Map what we know,
 // fall back to the original string so a new variant or decision still shows up verbatim.
 const RU = {
+  "D agent, published plan: D+1 recomputed at 12:00, D+2 bid at t0": "D — агент: D+1 с пересчётом, заявка D+2 из t0",
+  "main model vs fallback model (C vs B): boosting kept in every issue": "проектный выбор GBM против кривой мощности",
+  "wind spike 100 m/s only in the freshest run (day1)": "выброс 100 м/с только в самом свежем поле",
+  "older_run": "выбрал более старое допустимое поле",
   "A persistence (mean of the last 24 h)": "A — персистентность (среднее за 24 ч)",
   "B fixed pipeline: power curve, no checks, no recompute": "B — фиксированный пайплайн: кривая мощности, без проверок",
   "C model only: gradient boosting at t0, no recompute": "C — только модель: бустинг в t0, без пересчёта",
@@ -515,7 +529,7 @@ function renderEvidence(ev) {
     // ablation: each variant's bar is scaled to the worst one, so the gain reads at a glance
     const worst = Math.max(...r.ablation.map((a) => a.mae));
     html += `<p class="stat-l" style="margin:0 0 10px">Один и тот же месяц (${r.month}), ${r.issues} выпусков,
-      ${r.rows_scored} оценённых часов. Меньше MAE — точнее.</p>
+      ${r.rows_scored} пар «выпуск × час». Меньше MAE — точнее.</p>
       <div class="abl">${r.ablation.map((a, i) => `
         <div class="abl-row">
           <span class="abl-name">${esc(ru(a.variant))}</span>
@@ -561,45 +575,118 @@ function renderEvidence(ev) {
       }).join("")}</tbody></table>
       <p class="stat-l" style="margin-top:8px">Агент выдал полный горизонт в
         ${f.cases.filter((c) => c.agent.valid_hours === f.horizon_h).length} случаях из ${f.cases.length},
-        каждое решение записано в журнал прогона.</p>`;
+        каждое решение записано в журнал прогона. Полнота горизонта не доказывает точность при сбое.</p>`;
   }
   box.innerHTML = html;
 }
 
+// ---------- dispatcher state / provenance / export (R8) ----------
+function renderDispatcher(issue, steps) {
+  const warnings = issue.warnings || [];
+  const missingLog = !steps?.length;
+  const fallback = issue.fallback_used || issue.rows.some((r) => r.fallback_used);
+  const review = missingLog || warnings.length > 0 || steps?.some((s) => s.status !== "ok");
+  const status = $("issue-status");
+  status.dataset.state = review ? "review" : fallback ? "fallback" : "ready";
+  const label = review ? "Требуется проверка" : fallback ? "Резервный режим" : "Готов к рассмотрению";
+  status.textContent = `${label}. ${fallback ? "Использован запасной путь. " : ""}${missingLog
+    ? "Журнал недоступен или пуст: решения агента не подтверждены."
+    : review ? "Изучите замечания и решения агента перед использованием прогноза."
+    : "Замечаний в журнале нет. Прогноз не является автоматически отправленной заявкой."}`;
+
+  const original = new Map(issue.rows.filter((r) => +r.revision === 0).map((r) => [+r.lead_h, r]));
+  const revised = rows.filter((r) => +r.revision > 0 && original.has(+r.lead_h));
+  const delta = revised.length ? Math.max(...revised.map((r) =>
+    Math.abs(+r.power_farm - +original.get(+r.lead_h).power_farm))) * 100 : 0;
+  $("revision-info").textContent = revised.length
+    ? `Обновлено ${revised.length} ч. Максимальное изменение по парку: ${delta.toFixed(1)} п.п. номинала. Пунктир — первоначальный прогноз. CSV содержит все ревизии, это не готовая торговая заявка.`
+    : "Пересчитанных часов нет. CSV содержит исходный прогноз.";
+
+  $("provenance").hidden = false;
+  $("provenance-body").innerHTML = `<p class="stat-l">Время — Алматы (UTC+5). Показана новейшая ревизия каждого часа.
+    day1/day2/day3 — выбранное архивное поле Open-Meteo Previous Runs.
+    Допустимость определяется правилом проекта; точное историческое время публикации в этом результате не сохранено.
+    Полный состав ревизий доступен в CSV.</p><div class="scroll"><table>
+    <thead><tr><th>Час</th><th>Ревизия</th><th>Источник</th><th>Поле</th><th>Ветер, м/с</th><th>Модель</th><th>Резерв</th></tr></thead>
+    <tbody>${rows.map((r) => `<tr><td>${esc(dm(r.target_time_local))} ${esc(hhmm(r.target_time_local))}</td>
+    <td>${r.revision}</td><td>${esc(r.wx_model)}</td><td>${esc(r.wx_field)}</td>
+    <td>${r.ws100_fc == null ? "—" : (+r.ws100_fc).toFixed(1)}</td>
+    <td>${esc(r.model_name)}</td><td>${r.fallback_used ? "да" : "нет"}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
+function csvForIssue(issue) {
+  // Explicit contract order; null wind stays empty, booleans round-trip to Python.
+  const columns = ["issue_time_utc", "issue_time_local", "target_time_utc", "target_time_local",
+    "lead_h", "horizon", "revision", "power_t1", "power_t2", "power_farm", "p10", "p90",
+    "ws100_fc", "wx_field", "wx_model", "model_name", "fallback_used", "run_id"];
+  const cell = (v) => {
+    let text = String(v ?? "");
+    if (/^[=+@\-\t\r]/.test(text)) text = "'" + text;
+    return '"' + text.replace(/"/g, '""') + '"';
+  };
+  return columns.join(",") + "\r\n" + issue.rows.map((r) => columns.map((c) => cell(r[c])).join(",")).join("\r\n") + "\r\n";
+}
+
+$("export").addEventListener("click", () => {
+  if (!currentIssue) return;
+  const url = URL.createObjectURL(new Blob([csvForIssue(currentIssue)], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `issue_${currentIssue.issue_date}_all_revisions.csv`;
+  document.body.appendChild(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+
 // ---------- load ----------
 async function loadIssue() {
+  const token = ++requestId;
   const it = issues[idx];
+  if (!it) return;
   $("issue").value = it.issue_date;
   $("prev").disabled = idx === 0;
   $("next").disabled = idx === issues.length - 1;
+  clearIssue(`Загрузка выпуска ${it.issue_date}…`, true);
   try {
     const issue = await api(`/forecast/${it.issue_date}`);
+    if (token !== requestId) return;
+    if (!issue.rows?.length) throw new Error("пустой прогноз");
+    const steps = await api(`/runs/${encodeURIComponent(issue.run_id)}/log`).catch(() => null);
+    if (token !== requestId) return;
     [rows, superseded] = splitRevisions(issue.rows);
+    currentIssue = issue;
     $("issue-meta").innerHTML = `
-      <span>t0 <b>${dm(rows[0].issue_time_local)} ${hhmm(rows[0].issue_time_local)}</b> Алматы</span>
-      <span>модель <b>${esc(issue.model_name)}</b></span>
-      <span>погода <b>${esc(rows[0].wx_model)}</b></span>
-      <span>ревизия <b>${issue.revision}</b>${superseded.length ? ` · пересчитано часов: ${superseded.length}` : ""}</span>
-      ${issue.fallback_used ? `<span style="color:var(--warn)"><b>⚠ был фолбэк</b></span>` : ""}`;
+      <span>t0 <b>${esc(dm(rows[0].issue_time_local))} ${esc(hhmm(rows[0].issue_time_local))}</b> Алматы (UTC+5)</span>
+      <span>модели <b>${esc([...new Set(rows.map((r) => r.model_name))].join(", "))}</b></span>
+      <span>источники <b>${esc([...new Set(rows.map((r) => r.wx_model))].join(", "))}</b></span>
+      <span>ревизия <b>${Math.max(...rows.map((r) => +r.revision))}</b></span>`;
     draw(); renderStats(); renderLegend(); renderSummary(issue);
-    renderTrace(await api(`/runs/${issue.run_id}/log`).catch(() => []));
+    renderTrace(steps || []);
+    if (!steps?.length) $("trace").innerHTML = '<li class="err">Журнал недоступен или пуст</li>';
+    renderDispatcher(issue, steps);
+    $("export").disabled = false;
   } catch (e) {
-    // A failed load must leave nothing of the previous issue on screen: the selector already
-    // shows the new date, so a stale chart or trace would read as this issue's real numbers.
-    clearIssue(`не удалось загрузить выпуск ${it.issue_date}: ${esc(e.message)}`);
+    if (token !== requestId) return;
+    clearIssue(`Не удалось загрузить выпуск ${it.issue_date}: ${e.message}`);
   }
 }
 
-function clearIssue(message) {
-  rows = [];
-  superseded = [];
+function clearIssue(message, loading = false) {
+  rows = []; superseded = []; currentIssue = null;
   draw();
-  $("issue-meta").innerHTML = "";
-  $("stats").innerHTML = `<p class="err">${message}</p>`;
-  $("legend").innerHTML = "";
-  $("trace").innerHTML = `<li class="empty">—</li>`;
-  $("summary").innerHTML = `<p class="empty">—</p>`;
-  $("warnings").innerHTML = "";
+  $("tip").classList.remove("on");
+  $("export").disabled = true;
+  $("issue-status").textContent = message;
+  $("issue-status").dataset.state = loading ? "loading" : "review";
+  $("issue-meta").textContent = "";
+  $("stats").textContent = "";
+  $("legend").textContent = "";
+  $("tr-sub").textContent = "";
+  $("trace").innerHTML = '<li class="empty">—</li>';
+  $("summary").textContent = "—";
+  $("warnings").textContent = "";
+  $("revision-info").textContent = "";
+  $("provenance").hidden = true;
+  $("provenance-body").textContent = "";
 }
 
 (async () => {
@@ -615,10 +702,11 @@ function clearIssue(message) {
   try {
     issues = await api("/issues");
   } catch (e) {
-    $("stats").innerHTML = `<p class="err">API недоступен: ${e.message}</p>`;
+    clearIssue(`API недоступен: ${e.message}`);
     return;
   }
   if (!issues.length) {
+    clearIssue("Выпусков ещё нет");
     $("stats").innerHTML = `<p class="empty">выпусков ещё нет — запустите <code>uv run python -m app.cli backtest</code></p>`;
     $("trace").innerHTML = `<li class="empty">—</li>`;
     $("summary").innerHTML = `<p class="empty">—</p>`;

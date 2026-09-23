@@ -160,3 +160,89 @@ def test_ask_answers_from_the_issue_journal():
     assert response.status_code == 200
     body = response.json()
     assert body["answer"] and body["mode"] in ("llm", "demo")
+
+
+def test_dispatcher_rejects_stale_requests_and_exports_all_revisions():
+    """R8: run the shipped JS with delayed HTTP responses; Node is optional for Python users."""
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node required only for the lightweight UI regression check")
+    script = r'''
+const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
+const page = fs.readFileSync('static/index.html', 'utf8')
+  .split('<script>')[1].split('</script>')[0];
+const elements = new Map();
+const document = {getElementById(id) {
+  if (!elements.has(id)) elements.set(id, {textContent: '', innerHTML: '', dataset: {},
+    classList: {remove() {}}, addEventListener() {}});
+  return elements.get(id);
+}};
+const pending = new Map();
+const sandbox = {document, console, setTimeout, fetch: (path) => new Promise((resolve, reject) => {
+  pending.set(path, {resolve: (data) => resolve({ok: true, json: async () => data}), reject});
+})};
+vm.createContext(sandbox);
+vm.runInContext(page.slice(0, page.lastIndexOf('(async () => {')), sandbox);
+vm.runInContext(`draw = () => {}; renderStats = () => {}; renderLegend = () => {};
+renderSummary = () => {}; renderTrace = () => {};
+issues = [{issue_date:'2026-01-31'}, {issue_date:'2026-02-01'}];`, sandbox);
+const evaluate = (s) => vm.runInContext(s, sandbox);
+const flush = () => new Promise((r) => setImmediate(r));
+const row = {issue_time_utc:'2026-01-31T19:00:00Z', issue_time_local:'2026-02-01T00:00:00+05:00',
+ target_time_utc:'2026-01-31T19:00:00Z', target_time_local:'2026-02-01T00:00:00+05:00',
+ lead_h:0, horizon:'24h', revision:0, power_t1:0.4, power_t2:0.4, power_farm:0.4,
+ p10:0.2, p90:0.6, ws100_fc:null, wx_field:'none', wx_model:'none', model_name:'climatology',
+ fallback_used:true, run_id:'new'};
+const issue = (id) => ({issue_date:id === 'old' ? '2026-01-31' : '2026-02-01',
+ run_id:id, model_name:'climatology', rows:[{...row, run_id:id}], warnings:[], fallback_used:true});
+const steps = [{status:'ok'}];
+(async () => {
+  // An old forecast response arrives after the new issue has finished.
+  evaluate('idx=0; loadIssue()'); evaluate('idx=1; loadIssue()');
+  pending.get('/api/forecast/2026-02-01').resolve(issue('new')); await flush();
+  pending.get('/api/runs/new/log').resolve(steps); await flush();
+  pending.get('/api/forecast/2026-01-31').resolve(issue('old')); await flush();
+  assert.equal(evaluate('currentIssue.run_id'), 'new');
+  assert.equal(elements.get('issue-status').dataset.state, 'fallback');
+  // Old log response must also be ignored.
+  evaluate('idx=0; loadIssue()');
+  pending.get('/api/forecast/2026-01-31').resolve(issue('old')); await flush();
+  evaluate('idx=1; loadIssue()');
+  assert.equal(evaluate('currentIssue'), null);
+  assert.equal(elements.get('export').disabled, true);
+  pending.get('/api/forecast/2026-02-01').resolve(issue('new')); await flush();
+  pending.get('/api/runs/new/log').resolve(steps); await flush();
+  pending.get('/api/runs/old/log').resolve([{status:'fail'}]); await flush();
+  assert.equal(evaluate('currentIssue.run_id'), 'new');
+  // An old rejection must not clear the current successful issue.
+  evaluate('idx=0; loadIssue()'); evaluate('idx=1; loadIssue()');
+  pending.get('/api/forecast/2026-02-01').resolve(issue('new')); await flush();
+  pending.get('/api/runs/new/log').resolve(steps); await flush();
+  pending.get('/api/forecast/2026-01-31').reject(new Error('old failure')); await flush();
+  assert.equal(evaluate('currentIssue.run_id'), 'new');
+  // Missing log triggers review, not a false success.
+  evaluate('idx=1; loadIssue()');
+  pending.get('/api/forecast/2026-02-01').resolve(issue('new')); await flush();
+  pending.get('/api/runs/new/log').reject(new Error('missing log')); await flush();
+  assert.equal(elements.get('issue-status').dataset.state, 'review');
+  sandbox.fixture = {...issue('new'), rows:[row, {...row, revision:1, wx_model:'=malicious()'}]};
+  const csv = evaluate('csvForIssue(fixture)');
+  assert.equal(csv.trim().split('\r\n').length, 3);
+  assert.ok(csv.includes('"\'=malicious()"'));
+  assert.ok(csv.includes('"0.6","","none"')); // Missing wind must not become zero.
+  evaluate('idx=0; loadIssue()');
+  pending.get('/api/forecast/2026-01-31').reject(new Error('current failure')); await flush();
+  assert.equal(evaluate('currentIssue'), null);
+  assert.equal(elements.get('export').disabled, true);
+  assert.equal(elements.get('provenance').hidden, true);
+})().catch((error) => {console.error(error); process.exitCode = 1;});
+'''
+    result = subprocess.run(
+        [node, "-e", script], cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=30
+    )
+    assert result.returncode == 0, result.stderr
