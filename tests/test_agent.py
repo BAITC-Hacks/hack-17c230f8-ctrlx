@@ -54,6 +54,16 @@ def test_every_row_uses_a_run_published_before_the_issue(issue_run):
         assert n >= config.safe_previous_day(r.lead_h, hours_since), r
 
 
+def test_issue_writes_a_day_ahead_bid_in_mwh(issue_run):
+    issue, _, runs = issue_run
+    bids = list((runs / issue.run_id).glob("bid_*.csv"))
+    assert len(bids) == 1
+    bid = pd.read_csv(bids[0])
+    assert len(bid) == 24
+    assert (bid["plan_mwh"] >= 0).all() and (bid["plan_mwh"] <= config.RATED_MW).all()
+    assert (bid["p10_mwh"] <= bid["plan_mwh"] + 1e-9).all()
+
+
 def test_every_used_run_was_available_before_the_issue(issue_run):
     """Provenance in the log: the newest run behind any hour was published before t0."""
     issue, _, runs = issue_run

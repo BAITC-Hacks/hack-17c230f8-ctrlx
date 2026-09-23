@@ -33,3 +33,4 @@
 - 15:50 · mustafa · Мустафа · docs: REQUIREMENTS statuses and contract match the implementation (tz, delay 7 h, models, rev1 >= 2 h) (R1-R10) · тесты: pass
 - 15:54 · mustafa · Мустафа · README: facts match the code — leak rule 7 h (16/40), UTC+5 clock, VES Nurly 5 MW, bid alignment, quick start with backtest, metrics table, LLM fallback vars, sha256 LF vs CRLF (R6) · тесты: pass
 - 15:57 · ansar · Ансар · fix(security): contain run_id to a child of runs/, escape agent text before innerHTML (R8) · тесты: pass
+- 15:59 · mustafa · Мустафа · agent: hourly day-ahead bid draft for D+2 in MWh (Astana time) next to each report + test; regenerated runs (R5, R10) · тесты: pass

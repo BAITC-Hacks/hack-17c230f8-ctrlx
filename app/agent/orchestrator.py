@@ -231,6 +231,28 @@ def _summary(issue_date, t0, rows0, rows1, check, recompute, reflect, prev, val,
     return "\n".join(lines)
 
 
+def _write_bid(rows0: list[dict], run_dir) -> str:
+    """Day-ahead bid draft for D+2 (lead 24-47): 24 hourly MWh values, Astana time (UTC+5).
+
+    The median is the bid (symmetric 1.3 / 0.7 imbalance coefficients); p10/p90 show the risk.
+    """
+    d = pd.DataFrame(rows0)
+    d = d[d["lead_h"] >= 24]
+    mw = config.RATED_MW
+    bid = pd.DataFrame(
+        {
+            "hour_astana": [_local(t).strftime("%Y-%m-%d %H:00") for t in d["target_time_utc"]],
+            "plan_mwh": (d["power_farm"] * mw).round(3).to_numpy(),
+            "p10_mwh": (d["p10"] * mw).round(3).to_numpy(),
+            "p90_mwh": (d["p90"] * mw).round(3).to_numpy(),
+        }
+    )
+    day = bid["hour_astana"].iloc[0][:10]
+    path = run_dir / f"bid_{day}.csv"
+    bid.to_csv(path, index=False)
+    return path.name
+
+
 def _llm_summary(facts_text: str, template: str) -> tuple[str, LlmInfo | None, str]:
     """Optional: the LLM rewrites the summary; every number must already exist in the facts."""
     from pydantic import BaseModel
@@ -480,10 +502,12 @@ def run_issue(
     path = out_dir / f"issue_{issue_date.isoformat()}.csv"
     pd.DataFrame(rows0 + rows1, columns=FORECAST_COLUMNS).to_csv(path, index=False)
     (log.dir / "report.md").write_text(summary + "\n", encoding="utf-8")
+    bid_path = _write_bid(rows0, log.dir)
     log.step(
         "write_report",
         "ok",
-        f"Сохранено: {path.name} ({len(rows0)} + {len(rows1)} строк), сводка report.md",
+        f"Сохранено: {path.name} ({len(rows0)} + {len(rows1)} строк), сводка report.md, "
+        f"черновик заявки на D+2 {bid_path}",
         started=t_all,
         llm=llm_info,
         decision="llm" if llm_info else "template",
