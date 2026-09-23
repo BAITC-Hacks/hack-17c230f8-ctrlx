@@ -240,6 +240,30 @@ function PageSkeleton() {
 
 // ---- screen ------------------------------------------------------------------------------------
 
+const MONTHS_GEN = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа",
+  "сентября", "октября", "ноября", "декабря"];
+
+/** YYYY-MM-DD shifted by n days (string arithmetic, no time zones involved). */
+function shiftDay(day: string, n: number): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d + n));
+  return t.toISOString().slice(0, 10);
+}
+
+/** «3 февраля», «03.02» or «2026-02-03» inside a question → YYYY-MM-DD (year 2026). */
+function dateInQuestion(q: string): string | null {
+  const iso = q.match(/\b(2026)-(\d{2})-(\d{2})\b/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const words = q.toLowerCase().match(/\b(\d{1,2})\s+(январ|феврал|март|апрел|ма[яй]|июн|июл|август|сентябр|октябр|ноябр|декабр)/);
+  if (words) {
+    const m = MONTHS_GEN.findIndex((name) => name.startsWith(words[2].slice(0, 3)));
+    if (m >= 0) return `2026-${String(m + 1).padStart(2, "0")}-${words[1].padStart(2, "0")}`;
+  }
+  const dots = q.match(/\b(\d{1,2})[./](\d{1,2})\b/);
+  if (dots) return `2026-${dots[2].padStart(2, "0")}-${dots[1].padStart(2, "0")}`;
+  return null;
+}
+
 const TITLE = "Вопрос агенту";
 const LEAD = "Спросите про любой день — агент ответит по своему журналу";
 
@@ -317,7 +341,25 @@ function AskScreen() {
   function ask(text: string) {
     const question = text.trim();
     if (!question || !current || pending) return;
-    const runId = current.run_id;
+    // a date inside the question picks the issue whose «сегодня» is that day (issue = day − 1)
+    const asked = dateInQuestion(question);
+    const target = asked ? (issues ?? []).find((i) => shiftDay(i.issue_date, 1) === asked) : undefined;
+    if (asked && !target) {
+      const id = ++seq.current;
+      setHistory((h) => ({
+        ...h,
+        [current.run_id]: [
+          ...(h[current.run_id] ?? []),
+          { id, question, state: { kind: "error", message: `Прогноза на ${dayLabel(asked)} нет: тестовый период — с 1 февраля по 1 марта 2026.` } },
+        ],
+      }));
+      setDraft("");
+      return;
+    }
+    if (target && target.issue_date !== current.issue_date) {
+      router.replace(`/ask?date=${target.issue_date}`, { scroll: false });
+    }
+    const runId = (target ?? current).run_id;
     const id = ++seq.current;
     setHistory((h) => ({
       ...h,
@@ -470,6 +512,10 @@ function AskScreen() {
             ))}
           </div>
 
+          <p className="mb-2 text-sm text-muted-foreground">
+            Разговор про выпуск за {dayLabel(date)}: сегодня {dayLabel(shiftDay(date, 1))}, завтра{" "}
+            {dayLabel(shiftDay(date, 2))}. Назовите другую дату в вопросе или выберите день выше.
+          </p>
           <form
             ref={composerRef}
             onSubmit={onSubmit}
@@ -482,7 +528,7 @@ function AskScreen() {
               id="ask-input"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="Или напишите свой вопрос"
+              placeholder="Например: пик ветра 3 февраля, энергия завтра, риски, что изменилось в 12:00"
               maxLength={500}
               autoComplete="off"
               className="h-10 border-0 bg-transparent px-3 text-base shadow-none focus-visible:ring-0 md:text-base dark:bg-transparent"
