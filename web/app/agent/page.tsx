@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import {
   Calculator,
   ChevronLeft,
@@ -9,14 +9,22 @@ import {
   CircleCheck,
   CircleDashed,
   CircleX,
+  ClipboardList,
+  CloudSun,
   FileBraces,
+  FileText,
   GitBranch,
   MessageSquareText,
   RefreshCw,
+  ScanSearch,
   SearchX,
   ServerCrash,
+  ShieldCheck,
+  SlidersHorizontal,
   Timer,
   TriangleAlert,
+  Undo2,
+  Wind,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -26,16 +34,16 @@ import {
   WX_FIELD_LABEL,
   api,
   dayLabel,
-  when,
   type AgentStep,
   type ForecastIssue,
   type IssueListItem,
   type WxField,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { Explain, PageHeader, Section, Stat, StatRow } from "@/components/kit";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -44,81 +52,84 @@ import { Skeleton } from "@/components/ui/skeleton";
 type Status = AgentStep["status"];
 type FlowStatus = Status | "skipped";
 
-// Amber on white is too faint for small text, so the warning badge keeps dark text and an amber icon.
-const STATUS: Record<FlowStatus, { text: string; icon: LucideIcon; icon_tone: string; text_tone: string; soft: string }> = {
-  ok: {
-    text: "ок",
-    icon: CircleCheck,
-    icon_tone: "text-[color:var(--ok)]",
-    text_tone: "text-[color:var(--ok)]",
-    soft: "bg-[color:var(--ok)]/10",
-  },
-  warn: {
-    text: "внимание",
-    icon: TriangleAlert,
-    icon_tone: "text-[color:var(--warn)]",
-    text_tone: "text-foreground",
-    soft: "bg-[color:var(--warn)]/15",
-  },
-  fail: {
-    text: "сбой",
-    icon: CircleX,
-    icon_tone: "text-destructive",
-    text_tone: "text-destructive",
-    soft: "bg-destructive/10",
-  },
-  skipped: {
-    text: "не запускался",
-    icon: CircleDashed,
-    icon_tone: "text-muted-foreground",
-    text_tone: "text-muted-foreground",
-    soft: "bg-muted",
-  },
+const STATUS: Record<FlowStatus, { text: string; icon: LucideIcon; tone: string }> = {
+  ok: { text: "готово", icon: CircleCheck, tone: "text-[color:var(--ok)]" },
+  warn: { text: "внимание", icon: TriangleAlert, tone: "text-[color:var(--warn)]" },
+  fail: { text: "сбой", icon: CircleX, tone: "text-destructive" },
+  skipped: { text: "пропущен", icon: CircleDashed, tone: "text-muted-foreground" },
 };
 
 const RANK: Record<Status, number> = { ok: 0, warn: 1, fail: 2 };
 
-const statusOf = (s: string) => STATUS[s as FlowStatus] ?? STATUS.warn;
-
-function StatusBadge({ status }: { status: FlowStatus }) {
-  const s = statusOf(status);
+function StatusLine({ status, className }: { status: FlowStatus; className?: string }) {
+  const s = STATUS[status];
   const Icon = s.icon;
   return (
-    <span
-      className={cn(
-        "inline-flex h-6 shrink-0 items-center gap-1 rounded-full px-2 text-xs font-medium",
-        s.soft,
-        s.text_tone,
-      )}
-    >
-      <Icon className={cn("size-3.5", s.icon_tone)} aria-hidden />
+    <span className={cn("inline-flex items-center gap-1.5", className)}>
+      <Icon className={cn("size-4 shrink-0", s.tone)} aria-hidden />
       {s.text}
     </span>
   );
 }
 
-// ---- decisions: the log keeps machine codes, the dispatcher reads words ------------------------
+// ---- steps in plain words ------------------------------------------------------------------------
+
+const TOOL_META: Record<string, { name: string; plain: string; icon: LucideIcon }> = {
+  plan: { name: "План", plain: "Решает, на какие сутки прогноз и какие данные уже известны.", icon: ClipboardList },
+  fetch_weather: { name: "Погода", plain: "Берёт прогноз погоды, доступный на момент выпуска.", icon: CloudSun },
+  validate_weather: {
+    name: "Проверка погоды",
+    plain: "Проверяет, что погода есть на все 48 часов и не взята из будущего.",
+    icon: ShieldCheck,
+  },
+  prepare: { name: "Подготовка", plain: "Готовит ветер, порывы и время суток для модели.", icon: SlidersHorizontal },
+  run_model: { name: "Прогноз", plain: "Считает выработку станции на каждый час.", icon: Wind },
+  analyze: { name: "Контроль", plain: "Проверяет прогноз на ошибки перед публикацией.", icon: ScanSearch },
+  recompute_if_updated: { name: "Уточнение в 12:00", plain: "Уточняет прогноз по свежей погоде.", icon: RefreshCw },
+  reflect: { name: "Сверка", plain: "Сравнивает прошлые прогнозы с фактом.", icon: Undo2 },
+  write_report: { name: "Отчёт", plain: "Сохраняет прогноз, заявку и сводку.", icon: FileText },
+};
+
+const metaOf = (tool: string) =>
+  TOOL_META[tool] ?? { name: TOOL_LABEL[tool] ?? tool, plain: "", icon: CircleDashed };
 
 const DECISION_LABEL: Record<string, string> = {
   facts_frozen: "прогноз только по погоде",
   facts_complete: "факт учтён",
   cache: "погода из архива",
-  live_match: "живой запрос совпал с архивом",
-  live_mismatch: "живой запрос расходится с архивом",
-  proceed: "продолжить",
-  older_run: "взять более старый прогон",
-  climatology: "климатология",
-  accept: "принять прогноз",
+  live_match: "свежий запрос совпал с архивом",
+  live_mismatch: "свежий запрос расходится с архивом",
+  proceed: "данные в порядке, продолжить",
+  older_run: "взять прогноз погоды постарше",
+  climatology: "средняя погода по сезону",
+  accept: "прогноз принят",
   reject: "не публиковать",
-  keep_revision_0: "оставить ревизию 0",
-  no_update: "без пересчёта",
-  frozen: "без коррекции",
-  ok: "дрейфа нет",
-  no_facts: "факта для сверки нет",
-  llm: "сводка от LLM",
-  llm_rejected: "LLM отклонена, сводка по шаблону",
+  keep_revision_0: "оставить утренний прогноз",
+  no_update: "уточнять нечего",
+  frozen: "без поправки",
+  ok: "поправка не нужна",
+  no_facts: "сверять пока не с чем",
+  llm: "сводку написал ИИ",
+  llm_rejected: "текст ИИ отклонён, сводка по шаблону",
   template: "сводка по шаблону",
 };
+
+// Decisions the agent takes on every normal night; anything else is worth opening first.
+const ROUTINE = new Set([
+  "facts_frozen",
+  "facts_complete",
+  "cache",
+  "live_match",
+  "proceed",
+  "accept",
+  "no_update",
+  "frozen",
+  "ok",
+  "no_facts",
+  "llm",
+  "template",
+  "recompute (без существенных изменений)",
+]);
 
 const MODEL_NAME: Record<string, string> = { ...MODEL_LABEL, gfs_power_curve: "кривая мощности по GFS" };
 
@@ -130,27 +141,22 @@ function decisionLabel(code: string): string {
       ? `запасная модель: ${MODEL_NAME[arrow[2]] ?? arrow[2]}`
       : `другой источник погоды: ${arrow[2]}`;
   }
-  if (code.startsWith("recompute")) return code.replace(/^recompute/, "пересчитать");
-  if (code.startsWith("drift:")) return code.replace(/^drift:/, "дрейф:");
+  if (code.startsWith("recompute")) return code.replace(/^recompute/, "уточнить прогноз");
+  if (code.startsWith("drift:")) return code.replace(/^drift:/, "сдвиг:");
   return code;
 }
+
+const notable = (s: AgentStep) => s.status !== "ok" || (s.decision !== null && !ROUTINE.has(s.decision));
 
 // ---- formatting ---------------------------------------------------------------------------------
 
 const intFmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
-const hoursFmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
+const oneFmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
 const ms = (value: number) => (value < 1 ? "меньше 1 мс" : `${intFmt.format(value)} мс`);
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-function plural(n: number, one: string, few: string, many: string): string {
-  const m10 = n % 10;
-  const m100 = n % 100;
-  if (m10 === 1 && m100 !== 11) return one;
-  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
-  return many;
-}
-
-// ---- validate_weather args ---------------------------------------------------------------------
+// ---- validate_weather args (expert details only) --------------------------------------------------
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
@@ -170,11 +176,10 @@ interface WeatherArgs {
   hours: number;
   fields: { key: WxField; hours: number }[];
   source: string | null;
-  margin_h: number | null;
 }
 
 function readWeatherArgs(args: Record<string, unknown>): WeatherArgs | null {
-  const { covered, hours, fields, source, min_margin_h } = args;
+  const { covered, hours, fields, source } = args;
   if (typeof covered !== "number" || typeof hours !== "number" || hours <= 0) return null;
   const parsed: WeatherArgs["fields"] = [];
   if (isRecord(fields)) {
@@ -183,70 +188,41 @@ function readWeatherArgs(args: Record<string, unknown>): WeatherArgs | null {
     }
   }
   parsed.sort((a, b) => FIELD_ORDER.indexOf(a.key) - FIELD_ORDER.indexOf(b.key));
-  return {
-    covered,
-    hours,
-    fields: parsed,
-    source: typeof source === "string" && source ? source : null,
-    margin_h: typeof min_margin_h === "number" ? min_margin_h : null,
-  };
+  return { covered, hours, fields: parsed, source: typeof source === "string" && source ? source : null };
 }
 
-function WeatherFacts({ w }: { w: WeatherArgs }) {
+function WeatherBar({ w }: { w: WeatherArgs }) {
+  if (w.fields.length === 0) return null;
   return (
-    <div className="mt-3 rounded-md border px-3 py-2.5 text-sm">
-      <div className="flex flex-wrap gap-x-5 gap-y-1">
-        <span>
-          <span className="text-muted-foreground">Покрыто </span>
-          <span className="font-medium">
-            {w.covered} из {w.hours} ч
-          </span>
-        </span>
-        {w.source && (
-          <span>
-            <span className="text-muted-foreground">Источник </span>
-            <span className="font-medium">{w.source}</span>
-          </span>
-        )}
-        {w.margin_h !== null && (
-          <span>
-            <span className="text-muted-foreground">Запас публикации </span>
-            <span className="font-medium">{hoursFmt.format(w.margin_h)} ч</span>
-          </span>
-        )}
+    <div className="mt-2">
+      <div
+        className="flex h-2 overflow-hidden rounded-full bg-muted"
+        role="img"
+        aria-label={`Часы по свежести прогноза погоды: ${w.fields
+          .map((f) => `${WX_FIELD_LABEL[f.key]} — ${f.hours} ч`)
+          .join(", ")}`}
+      >
+        {w.fields.map((f) => (
+          <span
+            key={f.key}
+            className={cn("h-full border-r-2 border-card last:border-r-0", FIELD_TONE[f.key])}
+            style={{ width: `${(f.hours / w.hours) * 100}%` }}
+          />
+        ))}
       </div>
-      {w.fields.length > 0 && (
-        <>
-          <div
-            className="mt-2.5 flex h-2 overflow-hidden rounded-full bg-muted"
-            role="img"
-            aria-label={`Часы горизонта по свежести прогона: ${w.fields
-              .map((f) => `${WX_FIELD_LABEL[f.key]} — ${f.hours} ч`)
-              .join(", ")}`}
-          >
-            {w.fields.map((f) => (
-              <span
-                key={f.key}
-                className={cn("h-full border-r-2 border-card last:border-r-0", FIELD_TONE[f.key])}
-                style={{ width: `${(f.hours / w.hours) * 100}%` }}
-              />
-            ))}
-          </div>
-          <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            {w.fields.map((f) => (
-              <li key={f.key} className="inline-flex items-center gap-1.5">
-                <span aria-hidden className={cn("size-2 rounded-sm", FIELD_TONE[f.key])} />
-                {WX_FIELD_LABEL[f.key]} — {f.hours} ч
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+      <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        {w.fields.map((f) => (
+          <li key={f.key} className="inline-flex items-center gap-1.5">
+            <span aria-hidden className={cn("size-2 rounded-sm", FIELD_TONE[f.key])} />
+            {WX_FIELD_LABEL[f.key]} — {f.hours} ч
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
 
-// ---- flow of the 9 tools -----------------------------------------------------------------------
+// ---- flow of the 9 steps -------------------------------------------------------------------------
 
 interface FlowItem {
   tool: string;
@@ -266,234 +242,293 @@ function buildFlow(log: AgentStep[]): FlowItem[] {
   });
 }
 
-function FlowStrip({ log }: { log: AgentStep[] }) {
-  const flow = useMemo(() => buildFlow(log), [log]);
-  const warn = log.filter((s) => s.status === "warn").length;
-  const fail = log.filter((s) => s.status === "fail").length;
-  const total = log.reduce((sum, s) => sum + s.duration_ms, 0);
-  const clean = warn === 0 && fail === 0;
-  const notes = [
-    fail > 0 ? `${fail} ${plural(fail, "шаг", "шага", "шагов")} со сбоем` : null,
-    warn > 0 ? `${warn} ${plural(warn, "шаг", "шага", "шагов")} с пометкой «внимание»` : null,
-  ].filter((x): x is string => x !== null);
+const keyStep = (item: FlowItem): AgentStep | undefined => item.steps.find(notable) ?? item.steps.at(-1);
+
+function FlowStrip({
+  flow,
+  selected,
+  onSelect,
+}: {
+  flow: FlowItem[];
+  selected: string;
+  onSelect: (tool: string) => void;
+}) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const tabs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // On narrow screens the strip scrolls; keep the chosen step in view.
+  useEffect(() => {
+    const box = scroller.current;
+    const el = tabs.current[flow.findIndex((f) => f.tool === selected)];
+    if (!box || !el || box.scrollWidth <= box.clientWidth) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    box.scrollTo({
+      left: el.offsetLeft - box.clientWidth / 2 + el.offsetWidth / 2,
+      behavior: reduce ? "auto" : "smooth",
+    });
+  }, [flow, selected]);
+
+  const onKeyDown = (e: KeyboardEvent<HTMLOListElement>) => {
+    const i = flow.findIndex((f) => f.tool === selected);
+    const next =
+      e.key === "ArrowRight" ? i + 1 : e.key === "ArrowLeft" ? i - 1 : e.key === "Home" ? 0 : e.key === "End" ? flow.length - 1 : null;
+    if (next === null || next < 0 || next >= flow.length) return;
+    e.preventDefault();
+    onSelect(flow[next].tool);
+    tabs.current[next]?.focus();
+  };
 
   return (
-    <Card>
-      <CardHeader className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
-        <div className="min-w-0">
-          <CardTitle>Путь выпуска</CardTitle>
-          <CardDescription className="mt-1 flex items-center gap-1.5">
-            {clean ? (
-              <CircleCheck className="size-4 shrink-0 text-[color:var(--ok)]" aria-hidden />
-            ) : (
-              <TriangleAlert
-                className={cn("size-4 shrink-0", fail > 0 ? "text-destructive" : "text-[color:var(--warn)]")}
-                aria-hidden
-              />
-            )}
-            {clean
-              ? `Все ${log.length} ${plural(log.length, "шаг прошёл", "шага прошли", "шагов прошли")} без замечаний`
-              : `Замечания: ${notes.join(", ")}`}
-          </CardDescription>
-        </div>
-        <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Timer className="size-4" aria-hidden />
-          Агент работал {ms(total)}
-        </span>
-      </CardHeader>
-      <CardContent>
-        <ol className="grid grid-cols-3 gap-x-3 gap-y-5 sm:grid-cols-5 lg:grid-cols-9 lg:gap-x-0">
-          {flow.map((item, i) => {
-            const s = statusOf(item.status);
-            const Icon = s.icon;
-            const first = item.steps[0];
-            const last = i === flow.length - 1;
-            const body = (
-              <>
-                <div className="flex items-center">
-                  <Icon className={cn("size-5 shrink-0", s.icon_tone)} aria-hidden />
-                  {!last && <span aria-hidden className="mx-2 hidden h-px flex-1 bg-border lg:block" />}
-                </div>
-                <div className="mt-2 pr-2 text-[13px] leading-snug font-medium group-hover:underline">
-                  {TOOL_LABEL[item.tool] ?? item.tool}
-                </div>
-                <div className={cn("mt-0.5 text-xs", s.text_tone)}>
-                  {s.text}
-                  {item.steps.length > 1 &&
-                    `, ${item.steps.length} ${plural(item.steps.length, "запуск", "запуска", "запусков")}`}
-                </div>
-              </>
-            );
-            return (
-              <li key={item.tool} className="min-w-0">
-                {first ? (
-                  <a
-                    href={`#step-${first.step}`}
-                    className="group block rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                  >
-                    {body}
-                  </a>
-                ) : (
-                  <div>{body}</div>
-                )}
-              </li>
-            );
-          })}
-        </ol>
-      </CardContent>
-    </Card>
+    <div ref={scroller} className="-mx-5 overflow-x-auto px-5 pb-2 [scrollbar-width:none] sm:-mx-8 sm:px-8">
+      <ol
+        role="tablist"
+        aria-label="Шаги агента"
+        onKeyDown={onKeyDown}
+        className="grid"
+        style={{ gridTemplateColumns: `repeat(${flow.length}, minmax(0, 1fr))`, minWidth: `${flow.length * 5.75}rem` }}
+      >
+        {flow.map((item, i) => {
+          const meta = metaOf(item.tool);
+          const Icon = meta.icon;
+          const active = item.tool === selected;
+          return (
+            <li key={item.tool} role="presentation" className="relative min-w-0">
+              {i < flow.length - 1 && (
+                <span aria-hidden className="absolute top-6 left-1/2 h-px w-full bg-border" />
+              )}
+              <button
+                ref={(el) => {
+                  tabs.current[i] = el;
+                }}
+                type="button"
+                role="tab"
+                id={`agent-tab-${item.tool}`}
+                aria-selected={active}
+                aria-controls="agent-step-panel"
+                tabIndex={active ? 0 : -1}
+                onClick={() => onSelect(item.tool)}
+                className="group flex w-full flex-col items-center gap-3 rounded-xl px-1 pb-1 text-center outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
+                <span
+                  className={cn(
+                    "relative z-10 flex size-12 items-center justify-center rounded-full transition-[background-color,box-shadow,transform] duration-150 ease-[var(--ease-out-strong)] group-active:scale-95",
+                    active
+                      ? "bg-primary text-primary-foreground ring-4 ring-primary/15"
+                      : "bg-card text-foreground/75 ring-1 ring-border group-hover:ring-foreground/30",
+                    !active && item.status === "warn" && "ring-2 ring-[color:var(--warn)]",
+                    !active && item.status === "fail" && "ring-2 ring-destructive",
+                    item.status === "skipped" && "opacity-60",
+                  )}
+                >
+                  <Icon className="size-5" aria-hidden />
+                </span>
+                <span className={cn("text-sm leading-snug text-balance", active ? "font-semibold" : "font-medium")}>
+                  {meta.name}
+                </span>
+                <StatusLine status={item.status} className="text-xs text-muted-foreground" />
+                <span
+                  aria-hidden
+                  className={cn("h-0.5 w-8 rounded-full transition-colors duration-150", active ? "bg-primary" : "bg-transparent")}
+                />
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 
-// ---- timeline ----------------------------------------------------------------------------------
+// ---- detail of the selected step ----------------------------------------------------------------
 
-function StepItem({ step, index, last }: { step: AgentStep; index: number; last: boolean }) {
-  const s = statusOf(step.status);
+function ExpertDetails({ step, runs }: { step: AgentStep; runs: number }) {
   const weather = step.tool === "validate_weather" ? readWeatherArgs(step.args) : null;
-  const label = step.decision ? decisionLabel(step.decision) : null;
+  const rows: { term: string; value: ReactNode }[] = [
+    ...(step.decision ? [{ term: "Запись в журнале", value: step.summary }] : []),
+    ...(weather
+      ? [
+          {
+            term: "Покрытие погодой",
+            value: (
+              <>
+                {weather.covered} из {weather.hours} ч{weather.source ? `, источник ${weather.source}` : ""}
+                <WeatherBar w={weather} />
+              </>
+            ),
+          },
+        ]
+      : []),
+    ...(step.llm
+      ? [{ term: "ИИ", value: `${step.llm.provider} ${step.llm.model}, ${intFmt.format(step.llm.tokens)} токенов` }]
+      : []),
+    ...(runs > 1 ? [{ term: "Запусков", value: String(runs) }] : []),
+    { term: "Код шага", value: <code className="font-mono text-xs">{step.tool}</code> },
+    ...(step.decision && decisionLabel(step.decision) !== step.decision
+      ? [{ term: "Код решения", value: <code className="font-mono text-xs">{step.decision}</code> }]
+      : []),
+    { term: "Прогон", value: <code className="font-mono text-xs break-all">{step.run_id}</code> },
+  ];
   return (
-    <li
-      id={`step-${step.step}`}
-      className="wc-step relative scroll-mt-6 pb-7 pl-11 last:pb-0"
-      style={{ animationDelay: `${index * 40}ms` }}
-    >
-      {!last && <span aria-hidden className="absolute top-9 bottom-1 left-[15px] w-px bg-border" />}
-      <span
-        className={cn(
-          "absolute top-0 left-0 flex size-8 items-center justify-center rounded-full border bg-card text-xs font-semibold",
-          step.status === "warn" && "border-[color:var(--warn)]",
-          step.status === "fail" && "border-destructive",
-        )}
-        aria-hidden
-      >
-        {step.step}
-      </span>
+    <details className="group/x md:col-span-2">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md text-sm text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="size-4 transition-transform duration-150 group-open/x:rotate-90" aria-hidden />
+        Подробнее для экспертов
+      </summary>
+      <dl className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[max-content_minmax(0,1fr)]">
+        {rows.map((r) => (
+          <div key={r.term} className="contents">
+            <dt className="text-muted-foreground">{r.term}</dt>
+            <dd className="min-w-0 text-pretty">{r.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
+  );
+}
 
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-          <h3 className="text-base font-medium">
-            <span className="sr-only">Шаг {step.step}: </span>
-            {TOOL_LABEL[step.tool] ?? step.tool}
-          </h3>
-          <code className="font-mono text-xs text-muted-foreground">{step.tool}</code>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-            <Timer className="size-3.5" aria-hidden />
-            {ms(step.duration_ms)}
-          </span>
-          <StatusBadge status={step.status} />
+function StepDetail({ item, index, total }: { item: FlowItem; index: number; total: number }) {
+  const meta = metaOf(item.tool);
+  const step = keyStep(item);
+  return (
+    <div
+      id="agent-step-panel"
+      role="tabpanel"
+      aria-labelledby={`agent-tab-${item.tool}`}
+      className="wc-enter grid gap-8 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] md:gap-x-12"
+    >
+      <div>
+        <p className="text-sm text-muted-foreground">
+          Шаг {index + 1} из {total}
+        </p>
+        <h2 className="mt-1 text-2xl font-semibold tracking-tight">{meta.name}</h2>
+        {meta.plain && <p className="mt-3 text-base text-muted-foreground">{meta.plain}</p>}
+        <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <StatusLine status={item.status} />
+          {step && (
+            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+              <Timer className="size-4" aria-hidden />
+              {ms(step.duration_ms)}
+            </span>
+          )}
         </div>
       </div>
 
-      <p className="mt-1.5 text-sm leading-relaxed text-pretty">{step.summary}</p>
-
-      {step.decision && (
-        <div className={cn("mt-3 rounded-md px-3 py-2 text-sm", step.status === "ok" ? "bg-muted/70" : s.soft)}>
-          <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <GitBranch className="size-3.5 shrink-0 translate-y-0.5 text-muted-foreground" aria-hidden />
-            <span className="font-medium">Решение: {label}</span>
-            {label !== step.decision && (
-              <code className="font-mono text-xs text-muted-foreground">{step.decision}</code>
-            )}
-          </p>
-          {step.reason && <p className="mt-0.5 pl-5.5 text-muted-foreground">{step.reason}</p>}
-        </div>
+      {step ? (
+        <dl className="flex flex-col gap-6">
+          <div>
+            <dt className="text-sm text-muted-foreground">{step.decision ? "Решение" : "Итог"}</dt>
+            <dd className="mt-1 text-lg font-medium text-pretty">
+              {cap(step.decision ? decisionLabel(step.decision) : step.summary)}
+            </dd>
+          </div>
+          {step.decision && step.reason && (
+            <div>
+              <dt className="text-sm text-muted-foreground">Почему</dt>
+              <dd className="mt-1 text-base text-pretty">{cap(step.reason)}</dd>
+            </div>
+          )}
+        </dl>
+      ) : (
+        <p className="text-base text-muted-foreground">В этом выпуске шаг не запускался.</p>
       )}
 
-      {weather && <WeatherFacts w={weather} />}
-
-      {step.llm && (
-        <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <MessageSquareText className="size-3.5" aria-hidden />
-          LLM: {step.llm.provider} {step.llm.model}, {intFmt.format(step.llm.tokens)}{" "}
-          {plural(step.llm.tokens, "токен", "токена", "токенов")}
-        </p>
-      )}
-    </li>
+      {step && <ExpertDetails step={step} runs={item.steps.length} />}
+    </div>
   );
 }
 
-// ---- side panel --------------------------------------------------------------------------------
+// ---- how it works ----------------------------------------------------------------------------------
 
 const PRINCIPLES: { icon: LucideIcon; text: string }[] = [
-  {
-    icon: Calculator,
-    text: "Все числа считают детерминированные инструменты: погода, признаки, модель и проверки.",
-  },
-  {
-    icon: GitBranch,
-    text: "На развилках решают пороги: более старый прогон → другой источник погоды → запасная модель → климатология.",
-  },
-  {
-    icon: RefreshCw,
-    text: "Когда выходит новый прогон погоды, выпуск пересчитывается и проходит те же проверки, что и основной.",
-  },
-  {
-    icon: MessageSquareText,
-    text: "LLM только объясняет: каждое число в её тексте сверяется с фактами выпуска, иначе остаётся сводка по шаблону.",
-  },
+  { icon: Calculator, text: "Все числа считают проверенные модели, не ИИ." },
+  { icon: GitBranch, text: "Если данные плохие — агент берёт запасной путь и пишет почему." },
+  { icon: RefreshCw, text: "В 12:00 уточняет прогноз по свежей погоде." },
+  { icon: MessageSquareText, text: "ИИ только объясняет итог простыми словами." },
 ];
-
-function IssueFacts({ issue }: { issue: ForecastIssue }) {
-  const issuedAt = issue.rows[0]?.issue_time_local;
-  const rows: { term: string; value: ReactNode }[] = [
-    { term: "Выпуск за", value: dayLabel(issue.issue_date) },
-    ...(issuedAt ? [{ term: "Прогноз сделан", value: `${when(issuedAt)} (Алматы)` }] : []),
-    { term: "Модель", value: MODEL_NAME[issue.model_name] ?? issue.model_name },
-    { term: "Последняя ревизия", value: String(issue.revision) },
-    {
-      term: "Запасной путь",
-      value: issue.fallback_used ? (
-        <span className="inline-flex items-center gap-1">
-          <TriangleAlert className="size-3.5 text-[color:var(--warn)]" aria-hidden />
-          использован
-        </span>
-      ) : (
-        <span className="inline-flex items-center gap-1">
-          <CircleCheck className="size-3.5 text-[color:var(--ok)]" aria-hidden />
-          не понадобился
-        </span>
-      ),
-    },
-    { term: "Прогон", value: <code className="font-mono text-xs break-all">{issue.run_id}</code> },
-  ];
-  return (
-    <Card size="sm">
-      <CardHeader>
-        <CardTitle>Этот выпуск</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-sm">
-          {rows.map((r) => (
-            <div key={r.term} className="contents">
-              <dt className="text-muted-foreground">{r.term}</dt>
-              <dd className="min-w-0">{r.value}</dd>
-            </div>
-          ))}
-        </dl>
-      </CardContent>
-    </Card>
-  );
-}
 
 function HowItWorks() {
   return (
-    <Card size="sm">
-      <CardHeader>
-        <CardTitle>Как устроен агент</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ul className="flex flex-col gap-3 text-sm leading-relaxed">
-          {PRINCIPLES.map(({ icon: Icon, text }) => (
-            <li key={text} className="flex gap-2.5">
-              <Icon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-              <span>{text}</span>
-            </li>
-          ))}
-        </ul>
-      </CardContent>
-    </Card>
+    <Explain label="Как устроен агент">
+      <ul className="flex flex-col gap-3">
+        {PRINCIPLES.map(({ icon: Icon, text }) => (
+          <li key={text} className="flex gap-2.5">
+            <Icon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+            <span>{text}</span>
+          </li>
+        ))}
+      </ul>
+    </Explain>
+  );
+}
+
+// ---- loaded screen -----------------------------------------------------------------------------------
+
+function AgentRun({ issue, log }: { issue: ForecastIssue; log: AgentStep[] }) {
+  const flow = useMemo(() => buildFlow(log), [log]);
+  const fallback = (flow.find((f) => f.steps.some(notable)) ?? flow[0]).tool;
+  const [picked, setPicked] = useState<string | null>(null);
+  const selected = picked && flow.some((f) => f.tool === picked) ? picked : fallback;
+  const index = flow.findIndex((f) => f.tool === selected);
+
+  const clean = log.filter((s) => s.status === "ok").length;
+  const decisions = log.filter((s) => s.decision !== null).length;
+  const total = log.reduce((sum, s) => sum + s.duration_ms, 0);
+
+  return (
+    <>
+      <Section>
+        <StatRow>
+          <Stat label="Шагов без замечаний" value={clean} unit={`из ${log.length}`} />
+          <Stat label="Решений принято" value={decisions} />
+          <Stat
+            label="Время работы"
+            value={total >= 1000 ? oneFmt.format(total / 1000) : intFmt.format(total)}
+            unit={total >= 1000 ? "с" : "мс"}
+          />
+          <Stat label="Запасной путь" value={issue.fallback_used ? "включён" : "не нужен"} />
+        </StatRow>
+        {issue.warnings.length > 0 && (
+          <Alert className="mt-8">
+            <TriangleAlert className="text-[color:var(--warn)]" />
+            <AlertTitle>Предупреждения</AlertTitle>
+            <AlertDescription>
+              <ul className="list-disc pl-4">
+                {issue.warnings.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+      </Section>
+
+      <Section className="border-t-0 pt-0">
+        {log.length === 0 ? (
+          <p className="text-base text-muted-foreground">Для этого выпуска журнал пуст.</p>
+        ) : (
+          <Card className="gap-0 py-0 text-base">
+            <div className="px-5 pt-8 pb-6 sm:px-8">
+              <FlowStrip flow={flow} selected={selected} onSelect={setPicked} />
+            </div>
+            <div className="border-t px-5 py-8 sm:px-8 sm:py-10">
+              <StepDetail key={selected} item={flow[index]} index={index} total={flow.length} />
+            </div>
+          </Card>
+        )}
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+          <HowItWorks />
+          <a
+            href={`/api/runs/${encodeURIComponent(issue.run_id)}/log`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            <FileBraces className="size-4" aria-hidden />
+            Журнал целиком (JSON)
+          </a>
+        </div>
+      </Section>
+    </>
   );
 }
 
@@ -515,20 +550,17 @@ function ErrorAlert({ error }: { error: LoadError }) {
       <Alert>
         <SearchX />
         <AlertTitle>Выпуск не найден</AlertTitle>
-        <AlertDescription>{error.message}. Выберите другую дату в списке выпусков.</AlertDescription>
+        <AlertDescription>Выберите другую дату.</AlertDescription>
       </Alert>
     );
   }
   return (
     <Alert variant="destructive">
       <ServerCrash />
-      <AlertTitle>Сервис прогноза не отвечает</AlertTitle>
+      <AlertTitle>Нет связи с сервисом прогноза</AlertTitle>
       <AlertDescription>
         <p>
-          {error.status > 0
-            ? `Ответ ${error.status}: ${error.message}.`
-            : "Браузер не получил ответ от /api."}{" "}
-          Запустите API из корня проекта и обновите страницу:
+          {error.status > 0 ? `Ответ ${error.status}. ` : ""}Запустите API из корня проекта и обновите страницу:
         </p>
         <code className="mt-1 block w-fit rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">
           uv run uvicorn app.main:app --port 8000
@@ -540,25 +572,24 @@ function ErrorAlert({ error }: { error: LoadError }) {
 
 function LoadingState() {
   return (
-    <div className="flex flex-col gap-6" aria-busy="true" aria-label="Загрузка журнала агента">
-      <Skeleton className="h-36 w-full rounded-xl" />
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="flex flex-col gap-6 rounded-xl bg-card p-4 ring-1 ring-foreground/10">
-          {Array.from({ length: 5 }, (_, i) => (
-            <div key={i} className="flex gap-3">
-              <Skeleton className="size-8 shrink-0 rounded-full" />
-              <div className="flex flex-1 flex-col gap-2">
-                <Skeleton className="h-5 w-48" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-10 w-full" />
-              </div>
-            </div>
+    <div aria-busy="true" aria-label="Загрузка журнала агента">
+      <div className="grid grid-cols-2 gap-8 pt-2 pb-10 lg:grid-cols-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i}>
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="mt-3 h-10 w-20" />
+          </div>
+        ))}
+      </div>
+      <div className="rounded-xl p-8 ring-1 ring-foreground/10">
+        <div className="flex justify-between gap-4 overflow-hidden">
+          {Array.from({ length: 9 }, (_, i) => (
+            <Skeleton key={i} className="size-12 shrink-0 rounded-full" />
           ))}
         </div>
-        <div className="flex flex-col gap-6">
-          <Skeleton className="h-52 w-full rounded-xl" />
-          <Skeleton className="h-60 w-full rounded-xl" />
-        </div>
+        <Skeleton className="mt-12 h-7 w-48" />
+        <Skeleton className="mt-4 h-5 w-full max-w-md" />
+        <Skeleton className="mt-8 h-16 w-full" />
       </div>
     </div>
   );
@@ -688,7 +719,7 @@ function AgentScreen() {
         <Alert>
           <CircleDashed />
           <AlertTitle>Выпусков пока нет</AlertTitle>
-          <AlertDescription>Агент ещё не собрал ни одного прогноза, журнал появится после первого выпуска.</AlertDescription>
+          <AlertDescription>Журнал появится после первого прогноза.</AlertDescription>
         </Alert>
       );
     else body = <LoadingState />;
@@ -697,83 +728,17 @@ function AgentScreen() {
   } else if (current.error || !issue) {
     body = current.error ? <ErrorAlert error={current.error} /> : <LoadingState />;
   } else {
-    body = (
-      <div className="flex flex-col gap-6">
-        <FlowStrip log={current.log} />
-
-        {issue.warnings.length > 0 && (
-          <Alert>
-            <TriangleAlert className="text-[color:var(--warn)]" />
-            <AlertTitle>Предупреждения выпуска</AlertTitle>
-            <AlertDescription>
-              <ul className="list-disc pl-4">
-                {issue.warnings.map((w) => (
-                  <li key={w}>{w}</li>
-                ))}
-              </ul>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <Card>
-            <CardHeader>
-              <CardTitle>Журнал шагов</CardTitle>
-              <CardDescription>Что сделал каждый инструмент, какое решение принял и почему.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {current.log.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Для этого прогона журнал пуст.</p>
-              ) : (
-                <ol>
-                  {current.log.map((step, i) => (
-                    <StepItem
-                      key={`${step.run_id}-${step.step}`}
-                      step={step}
-                      index={i}
-                      last={i === current.log.length - 1}
-                    />
-                  ))}
-                </ol>
-              )}
-            </CardContent>
-          </Card>
-          <aside className="flex flex-col gap-6 lg:sticky lg:top-6">
-            <HowItWorks />
-            <IssueFacts issue={issue} />
-          </aside>
-        </div>
-      </div>
-    );
+    body = <AgentRun key={current.date} issue={issue} log={current.log} />;
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">Агент</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            {date
-              ? `Как агент собрал выпуск за ${dayLabel(date)}: что проверил, где выбирал и почему.`
-              : "Как агент собирает выпуск: что проверяет, где выбирает и почему."}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {issues && issues.length > 0 && date && <IssuePicker issues={issues} value={date} onChange={choose} />}
-          {issue && (
-            <a
-              href={`/api/runs/${encodeURIComponent(issue.run_id)}/log`}
-              target="_blank"
-              rel="noreferrer"
-              className={buttonVariants({ variant: "outline" })}
-            >
-              <FileBraces aria-hidden />
-              Журнал JSON
-            </a>
-          )}
-        </div>
-      </div>
-      {body}
+    <div>
+      <PageHeader
+        title="Что сделал агент"
+        lead="9 шагов за одну ночь — каждое решение с причиной"
+        actions={issues && issues.length > 0 && date ? <IssuePicker issues={issues} value={date} onChange={choose} /> : null}
+      />
+      <div>{body}</div>
     </div>
   );
 }

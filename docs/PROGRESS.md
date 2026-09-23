@@ -62,3 +62,4 @@
 - 17:04 · mustafa · Мустафа · platform: integration screen for the customer's IT (architecture, API, formats, on-prem deployment, pilot roadmap); per-turbine MW in chart; honest pair counts and quantile sums (R8) · тесты: pass
 - 17:06 · mustafa · Мустафа · platform: honest wording — admissible by the 7 h rule (not a proven publication time), bid-hour costs, D+2 bid is the pre-recompute version (R8) · тесты: pass
 - 17:08 · amirkhan · Амирхан · fix: reject malformed weather and unsupported forecast explanations (R2,R9) · тесты: pass
+- 17:15 · mustafa · Мустафа · platform redesign: plain words, one hero per screen, far less text, generous spacing, explanations behind «Как читать»; README section on the platform (R6, R8) · тесты: pass

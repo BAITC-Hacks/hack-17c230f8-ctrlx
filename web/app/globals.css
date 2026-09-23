@@ -50,7 +50,7 @@
 
 :root {
   /* WindCast: cool steppe paper, deep slate ink, one teal accent; amber/red only with text */
-  --background: #eef2f1;
+  --background: #f6f8f8;
   --foreground: #14212b;
   --card: #ffffff;
   --card-foreground: #14212b;
@@ -103,7 +103,7 @@
 }
 
 @layer base {
-  body { font-variant-numeric: tabular-nums; }
+  body { font-variant-numeric: tabular-nums; font-size: 16px; line-height: 1.6; }
 }
 
 .wc-enter { animation: wc-enter 220ms var(--ease-out-strong) both; }

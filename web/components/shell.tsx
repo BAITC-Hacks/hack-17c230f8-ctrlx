@@ -8,13 +8,13 @@ import { api, STATION } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/", label: "Обзор февраля", icon: CalendarRange },
-  { href: "/issues", label: "Выпуски", icon: Activity },
-  { href: "/bid", label: "Суточная заявка", icon: FileSpreadsheet },
-  { href: "/agent", label: "Агент", icon: Bot },
-  { href: "/quality", label: "Точность", icon: BarChart3 },
-  { href: "/ask", label: "Спросить агента", icon: MessageSquare },
-  { href: "/integration", label: "Интеграция", icon: Plug },
+  { href: "/", label: "Февраль", icon: CalendarRange },
+  { href: "/issues", label: "Прогноз на 48 ч", icon: Activity },
+  { href: "/bid", label: "Заявка на завтра", icon: FileSpreadsheet },
+  { href: "/agent", label: "Что сделал агент", icon: Bot },
+  { href: "/quality", label: "Насколько точно", icon: BarChart3 },
+  { href: "/ask", label: "Вопрос агенту", icon: MessageSquare },
+  { href: "/integration", label: "Для ИТ", icon: Plug },
 ];
 
 function ModeBadge() {
@@ -24,7 +24,7 @@ function ModeBadge() {
   }, []);
   if (!mode) return null;
   const text =
-    mode === "llm" ? "LLM подключена" : mode === "demo" ? "без LLM: сводки из шаблона" : "API недоступен";
+    mode === "llm" ? "ИИ-сводки включены" : mode === "demo" ? "работает без ключей" : "сервис прогноза не запущен";
   return (
     <span
       className={cn(
@@ -74,9 +74,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <header className="flex items-center justify-between gap-3 border-b bg-card px-4 py-3 md:px-8">
           <div className="min-w-0">
             <div className="truncate text-sm font-medium">{STATION} · 2 × Goldwind GW109/2500</div>
-            <div className="text-xs text-muted-foreground">
-              Тестовый период: 1–28 февраля 2026 · время Алматы (UTC+5)
-            </div>
+            <div className="text-xs text-muted-foreground">Февраль 2026 · время Алматы</div>
           </div>
           <ModeBadge />
         </header>
@@ -94,7 +92,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </Link>
           ))}
         </nav>
-        <main className="wc-enter mx-auto w-full max-w-6xl flex-1 px-4 py-6 md:px-8">{children}</main>
+        <main className="wc-enter mx-auto w-full max-w-6xl flex-1 px-5 py-10 md:px-12">{children}</main>
       </div>
     </div>
   );
