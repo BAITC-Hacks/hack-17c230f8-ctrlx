@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from app.config import HORIZON_H
+from app.config import HORIZON_H, INTRADAY_REFRESH_H
 from app.main import app
 
 client = TestClient(app)
@@ -42,8 +42,10 @@ def test_forecast_returns_full_horizon():
     response = client.get(f"/api/forecast/{SAMPLE_DATE}")
     assert response.status_code == 200
     issue = response.json()
-    assert len(issue["rows"]) == HORIZON_H
-    assert [r["lead_h"] for r in issue["rows"]] == list(range(HORIZON_H))
+    # rows carry every revision: rev 0 = full horizon at t0, rev 1 = recompute of the rest
+    rev0 = [r for r in issue["rows"] if r["revision"] == 0]
+    assert [r["lead_h"] for r in rev0] == list(range(HORIZON_H))
+    assert all(r["lead_h"] >= INTRADAY_REFRESH_H for r in issue["rows"] if r["revision"] == 1)
     assert issue["run_id"] == SAMPLE_RUN
     assert issue["summary"], "summary должен приходить из runs/<run_id>/report.md"
 
@@ -57,7 +59,9 @@ def test_forecast_rows_carry_the_leakage_field():
 
 def test_forecast_warnings_come_from_the_agent_log():
     issue = client.get(f"/api/forecast/{SAMPLE_DATE}").json()
-    assert issue["warnings"], "в образце лога есть шаги со статусом warn"
+    steps = client.get(f"/api/runs/{SAMPLE_RUN}/log").json()
+    flagged = [s for s in steps if s["status"] in ("warn", "fail")]
+    assert len(issue["warnings"]) == len(flagged)
 
 
 def test_forecast_unknown_date_is_404():
