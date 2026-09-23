@@ -12,7 +12,7 @@
 Python 3.12 · uv · FastAPI · pydantic · pandas · pytest · `openai` (OpenAI-совместимый клиент)
 - установка `uv sync` · запуск `uv run uvicorn app.main:app --reload --port 8000` · CLI `uv run python -m app.cli forecast --issue 2026-01-31`
 - **проверка:** `uv run ruff check . && uv run pytest -q`
-- **контракт** `app/schemas.py` + `app/config.py` · агент `app/agent/` (orchestrator, tools, log, llm_planner) · LLM `app/llm.py` · данные/признаки/модели `app/data.py`, `app/features.py`, `app/models.py`, `app/train.py`, `app/evaluate.py` · погода `app/weather.py` · API `app/main.py` + `app/api/routes.py` · UI `static/index.html` · CLI `uv run python -m app.cli backtest`
+- **контракт** `app/schemas.py` + `app/config.py` · агент `app/agent/` (orchestrator, tools, log, planner) · LLM `app/llm.py` · данные/признаки/модели `app/data.py`, `app/features.py`, `app/models.py`, `app/train.py`, `app/evaluate.py` · погода `app/weather.py` · API `app/main.py` + `app/api/routes.py` · UI `static/index.html` · CLI `uv run python -m app.cli backtest`
 <!-- /stack:py -->
 
 ## Команда: у каждого свой агент, все пушат в один `main`

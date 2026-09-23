@@ -38,12 +38,12 @@
     {
       "model": "gbm",
       "horizon": "24h",
-      "mae": 0.1785,
-      "rmse": 0.2483,
-      "nmae": 17.85,
-      "bias": 0.0236,
-      "skill_vs_persistence": 0.442,
-      "skill_vs_power_curve": 0.146,
+      "mae": 0.1796,
+      "rmse": 0.2497,
+      "nmae": 17.96,
+      "bias": 0.0225,
+      "skill_vs_persistence": 0.439,
+      "skill_vs_power_curve": 0.141,
       "n": 666
     },
     {
@@ -82,12 +82,12 @@
     {
       "model": "gbm",
       "horizon": "48h",
-      "mae": 0.1756,
-      "rmse": 0.2425,
-      "nmae": 17.56,
-      "bias": 0.0146,
-      "skill_vs_persistence": 0.509,
-      "skill_vs_power_curve": 0.143,
+      "mae": 0.1759,
+      "rmse": 0.2434,
+      "nmae": 17.59,
+      "bias": 0.0109,
+      "skill_vs_persistence": 0.508,
+      "skill_vs_power_curve": 0.141,
       "n": 642
     },
     {
@@ -126,35 +126,35 @@
     {
       "model": "gbm",
       "horizon": "all",
-      "mae": 0.1771,
-      "rmse": 0.2455,
-      "nmae": 17.71,
-      "bias": 0.0192,
-      "skill_vs_persistence": 0.477,
-      "skill_vs_power_curve": 0.144,
+      "mae": 0.1778,
+      "rmse": 0.2466,
+      "nmae": 17.78,
+      "bias": 0.0168,
+      "skill_vs_persistence": 0.475,
+      "skill_vs_power_curve": 0.141,
       "n": 1308
     }
   ],
-  "created_at": "2026-09-23T11:38:22.813248Z",
+  "created_at": "2026-09-23T12:16:31.853959Z",
   "extras": {
     "issues": 28,
     "interval_p10_p90": {
       "coverage": 0.82,
-      "mean_width": 0.59,
-      "cqr_qhat": 0.024
+      "mean_width": 0.582,
+      "cqr_qhat": 0.0216
     },
     "recompute_t0_plus_12h": {
       "pairs": 919,
-      "mae_rev0": 0.1718,
-      "mae_rev1": 0.1691,
+      "mae_rev0": 0.1726,
+      "mae_rev1": 0.1701,
       "changed_field_pairs": 520,
-      "mae_rev0_changed": 0.1845,
-      "mae_rev1_changed": 0.1798
+      "mae_rev0_changed": 0.1853,
+      "mae_rev1_changed": 0.181
     },
     "regulator_kpi_gbm": {
-      "within_5pct": 0.065,
-      "within_20pct": 0.199,
-      "within_30pct": 0.276
+      "within_5pct": 0.064,
+      "within_20pct": 0.193,
+      "within_30pct": 0.266
     },
     "imbalance_cost_upper_bound_mln_tg": {
       "assumptions": "bid hours (lead 24-47), 5.0 MW, 22.68 tg/kWh, penalty 0.3 x price for every kWh (all hours outside +-5 %), new-contract regime",
@@ -162,6 +162,6 @@
       "power_curve": 4.48,
       "gbm": 3.84
     },
-    "accuracy_1_minus_nmae_gbm": 0.823
+    "accuracy_1_minus_nmae_gbm": 0.822
   }
 }

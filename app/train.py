@@ -13,7 +13,7 @@ import pandas as pd
 from app import weather
 from app.config import LOCAL_TZ, MODEL_PATH, TRAIN_END, TRAIN_START
 from app.data import farm_hourly
-from app.features import FEATURES, add_features, issue_time_utc, select_many
+from app.features import FEATURE_DECIMALS, FEATURES, add_features, issue_time_utc, select_many
 from app.models import COVERAGE, CQR_DAYS, WindCastModel, fit_curves, fit_gbm
 
 TARGETS = ("p", "p1", "p2")
@@ -97,6 +97,7 @@ def train(train_end: pd.Timestamp, wx: pd.DataFrame | None = None, farm=None) ->
             "cqr_split": "target-purged; feature curves fit before calibration",
             "pc_residual_q": (float(res.quantile(0.1)), float(res.quantile(0.9))),
             "features": FEATURES,
+            "feature_decimals": FEATURE_DECIMALS,
             "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
         },
     )

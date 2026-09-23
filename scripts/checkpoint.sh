@@ -28,7 +28,7 @@ elif [ -f pyproject.toml ]; then
 fi
 [ "$tests" = "FAIL" ] && echo "⚠ тесты упали (push всё равно делаем), лог: $log"
 
-git add -A
+git add -A || { echo "✖ Не удалось подготовить файлы: проверь активный git-процесс и повтори checkpoint."; exit 1; }
 if ! scripts/secret-scan.sh --staged; then
   git reset -q; echo "✖ Checkpoint отменён: в изменениях секрет. Убери его и повтори."; exit 1
 fi
@@ -39,7 +39,7 @@ fi
 mkdir -p docs
 [ -f docs/PROGRESS.md ] || printf '# Прогресс по часам (п. 5.4.8)\n\n' > docs/PROGRESS.md
 printf -- '- %s · %s · %s · %s · тесты: %s\n' "$now" "${role:-?}" "$who" "$msg" "$tests" >> docs/PROGRESS.md
-git add docs/PROGRESS.md
+git add docs/PROGRESS.md || { echo "✖ Не удалось подготовить журнал прогресса."; exit 1; }
 git commit -q -m "${tag}checkpoint $now: $msg" || { echo "✖ commit не прошёл (см. выше)"; exit 1; }
 
 for attempt in 1 2 3 4 5; do

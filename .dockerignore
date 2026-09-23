@@ -3,3 +3,10 @@ __pycache__
 .pytest_cache
 .env*
 tests
+
+# Development checkouts and the optional Next.js build are not part of the Python image.
+.git
+**/node_modules
+**/.next
+.ruff_cache
+**/.DS_Store

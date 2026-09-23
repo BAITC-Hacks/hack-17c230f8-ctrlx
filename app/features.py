@@ -15,6 +15,12 @@ from app.config import HORIZON_H, LOCAL_TZ, MAX_PREVIOUS_DAY, safe_previous_day
 # best_match switched its source at this grid point: ICON before, ECMWF IFS HRES from 2025-10-01.
 NWP_EPOCH_SWITCH = pd.Timestamp("2025-10-01", tz="UTC")
 
+# ARM and x86 libm/NumPy can differ by one ULP for the same sine/cosine.
+# Tree splits are discontinuous: that bit changed a turbine forecast by 0.09.
+# Use the same decimal grid for training and inference, including interpolation
+# and division features. This requires retraining older, unrounded artifacts.
+FEATURE_DECIMALS = 12
+
 FEATURES = [
     "ws100",
     "ws100_3",
@@ -104,4 +110,5 @@ def add_features(frame: pd.DataFrame, curves: dict) -> pd.DataFrame:
     for n, curve in curves.items():
         m = d["field"] == n
         d.loc[m, "pc"] = curve.predict(d.loc[m, "ws100"].to_numpy())
+    d[FEATURES] = d[FEATURES].round(FEATURE_DECIMALS)
     return d

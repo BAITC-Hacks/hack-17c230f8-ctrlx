@@ -65,3 +65,4 @@
 - 17:15 · mustafa · Мустафа · platform redesign: plain words, one hero per screen, far less text, generous spacing, explanations behind «Как читать»; README section on the platform (R6, R8) · тесты: pass
 - 17:17 · mustafa · Мустафа · LLM demo run (OpenAI gpt-4.1-mini): dispatcher summary passed the number check, committed in runs/llm_demo for experts without a key (R9) · тесты: pass
 - 17:20 · mustafa · Мустафа · Fix cross-platform feature precision and refresh evidence (R3,R7) · тесты: pass
+- 17:21 · mustafa · Мустафа · Publish portable model and fail checkpoint on staging errors (R3,R6,R7) · тесты: pass
