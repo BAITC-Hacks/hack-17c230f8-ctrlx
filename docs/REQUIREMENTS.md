@@ -22,7 +22,7 @@
 | R6 | must | README и воспроизводимость: запуск в 3 команды без ключей, macOS и Windows, тесты, smoke | чистый clone → `uv sync && uv run python -m app.cli backtest` < 5 мин; `scripts/smoke.sh` PASS | ansar | 🚧 |
 | R7 | should | Метрики на отложенных периодах (январь 2026, февраль 2025) против B0/B1 | `uv run python -m app.cli evaluate --holdout 2026-01` → `outputs/metrics/holdout_2026-01.json` (`MetricsReport`), таблица в README и `docs/SOLUTION.md` | mustafa | ✅ |
 | R8 | should | Страница: выбор выпуска, график p50 + p10–p90 + B1, лента шагов агента, таблица метрик; API по контракту | `GET /api/issues`, `/api/forecast/{date}`, `/api/metrics`, `/api/runs/{id}/log`, `POST /api/run`; `static/index.html` | ansar | 🚧 |
-| R9 | could | LLM-планировщик и сводка диспетчеру (RU) на тех же tools; реальный прогон в репо | `forecast --llm` при `LLM_API_KEY` → лог с `llm != null`; `runs/llm_demo/` закоммичен | mustafa | 🚧 (код готов, нужен ключ; «Спросить агента» в работе) |
+| R9 | could | LLM-сводка (RU) и отдельный супервизор с динамическим выбором диагностических инструментов | `forecast --supervise --demo-dir runs/llm_demo` → `supervisor.json` с mode=llm, trace и решением accepted/review; `--llm` отдельно включает текстовую сводку | mustafa | 🚧 (код и офлайн-тесты готовы; реальный вызов требует ключа) |
 | R10 | could | Второй источник NWP (`gfs_seamless`): разброс как неопределённость, фолбэк при провале валидации | `wx_model` в CSV, решение в логе | amirkhan (загрузка, идея) / mustafa (агент) | ✅ (запасной источник и флаг расхождения в агенте) |
 
 ## Контракт (меняет только лид)
@@ -42,7 +42,7 @@
 
 **Метрики** `outputs/metrics/holdout_<период>.json` — `MetricsReport{period, train_end, rows:[{model, horizon(24h|48h|all), mae, rmse, nmae, bias, skill_vs_persistence, skill_vs_power_curve, n}], created_at}`.
 
-**CLI** (`app/cli.py`): `forecast --issue 2026-01-31 [--refresh] [--llm]` · `backtest [--from 2026-01-31] [--to 2026-02-27]` · `train` · `evaluate --holdout 2026-01`. По умолчанию офлайн из кэша; `--refresh` идёт в API.
+**CLI** (`app/cli.py`): `forecast --issue 2026-01-31 [--refresh] [--llm] [--supervise] [--demo-dir PATH]` · `backtest [--from 2026-01-31] [--to 2026-02-27]` · `train` · `evaluate --holdout 2026-01`. По умолчанию офлайн из кэша; `--refresh` сверяет окно выпуска с API. `--supervise` после числового выпуска выбирает quality/weather/revisions и finish; обязательные проверки могут только ужесточить решение до review. CSV уже выпущен, торговая заявка не отправляется. Подробности и ограничения: `docs/AGENTIC.md`.
 
 **API** (`app/api/routes.py`, префикс `/api`): `GET /health` · `GET /issues → list[IssueListItem]` · `GET /forecast/{issue_date} → ForecastIssue` · `GET /metrics → list[MetricsReport]` · `GET /runs/{run_id}/log → list[AgentStep]` · `POST /run (RunRequest) → RunResponse`.
 
@@ -104,4 +104,4 @@
 | Ключи в git | `.env.local` в `.gitignore`, `scripts/secret-scan.sh` в pre-commit |
 
 ## «Вау»: уникальность и польза (только после всех must)
-Агент не просто прогнозирует, а живёт во времени: в t0 + 12 ч замечает новый прогон, пересчитывает остаток горизонта и показывает диспетчеру, что изменилось и почему; расхождение ECMWF-подобного `best_match` и GFS даёт честную полосу неопределённости p10–p90 и предупреждение «доверие низкое».
+Агент воспроизводит обновление доступной погоды в t0 + 12 ч, пересчитывает допустимые будущие часы и показывает диспетчеру изменения. Коридор p10–p90 строят квантильные GBM с CQR-калибровкой; расхождение `best_match` и GFS — отдельный флаг риска, не источник этого интервала. Историческая доступность проверяется по принятому консервативному правилу задержки: точного журнала публикаций источника у команды нет.

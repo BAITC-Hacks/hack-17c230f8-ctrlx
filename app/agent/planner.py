@@ -63,6 +63,11 @@ def _facts(issue: ForecastIssue) -> dict:
     )
     complete_horizon = set(initial) == set(range(48)) and sum(r.revision == 0 for r in rows) == 48
     missing_weather = sum(r.wx_field == "none" for r in rows)
+    deltas = [
+        abs(r.power_farm - initial[r.lead_h].power_farm) for r in revised if r.lead_h in initial
+    ]
+    # An invalid revision must remain reviewable and JSON-serializable; its change is unknown.
+    max_delta = max(deltas, default=0.0) if all(math.isfinite(d) for d in deltas) else None
     return {
         "quality": {
             "run_id": issue.run_id,
@@ -86,14 +91,7 @@ def _facts(issue: ForecastIssue) -> dict:
         },
         "revisions": {
             "revised_hours": len(revised),
-            "max_power_change": max(
-                (
-                    abs(r.power_farm - initial[r.lead_h].power_farm)
-                    for r in revised
-                    if r.lead_h in initial
-                ),
-                default=0.0,
-            ),
+            "max_power_change": max_delta,
         },
     }
 

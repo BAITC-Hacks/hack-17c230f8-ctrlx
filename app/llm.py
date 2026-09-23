@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import time
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Literal
 
@@ -52,7 +53,7 @@ def llm_mode() -> Literal["llm", "demo"]:
 
 def last_provider() -> dict:
     """Which provider answered the last successful call (for the agent log)."""
-    return dict(_LAST)
+    return dict(_LAST.get() or {})
 
 
 def tool_completion(messages: list[dict], specs: list[dict], timeout: float = 8) -> dict | None:
@@ -87,7 +88,7 @@ def tool_completion(messages: list[dict], specs: list[dict], timeout: float = 8)
     return None
 
 
-_LAST: dict = {}
+_LAST: ContextVar[dict | None] = ContextVar("last_llm_provider", default=None)
 
 
 def _extract_json(content: str) -> dict:
@@ -105,28 +106,36 @@ def complete_json[ModelT: BaseModel](
     model_cls: type[ModelT], system: str, user: str
 ) -> ModelT | None:
     """Call the LLM(s) and validate the JSON reply against model_cls, or return None."""
+    _LAST.set({})
     providers = [] if _demo_forced() else _providers()
     if not providers:
         logger.warning("complete_json: no LLM provider configured")
         return None
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+    deadline = time.monotonic() + 25
     for api_key, base_url, model in providers:
-        client = OpenAI(api_key=api_key, base_url=base_url, timeout=30, max_retries=1)
         for fmt in ({"type": "json_object"}, None):  # not every endpoint supports json mode
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
             try:
-                kwargs = {"model": model, "messages": messages}
+                kwargs = {"model": model, "messages": messages, "max_tokens": 1000}
                 if fmt:
                     kwargs["response_format"] = fmt
-                response = client.chat.completions.create(**kwargs)
+                with OpenAI(
+                    api_key=api_key, base_url=base_url, timeout=min(8, remaining), max_retries=0
+                ) as client:
+                    response = client.chat.completions.create(**kwargs)
+                if time.monotonic() >= deadline:
+                    return None
                 content = response.choices[0].message.content
                 if not content:
                     raise ValueError("empty completion content")
                 result = model_cls.model_validate(_extract_json(content))
                 usage = getattr(response, "usage", None)
-                _LAST.clear()
-                _LAST.update(
+                _LAST.set(dict(
                     provider=base_url, model=model, tokens=getattr(usage, "total_tokens", 0) or 0
-                )
+                ))
                 return result
             except Exception as exc:  # any failure -> next attempt / provider / template
                 logger.warning("complete_json failed (%s): %s", model, type(exc).__name__)
