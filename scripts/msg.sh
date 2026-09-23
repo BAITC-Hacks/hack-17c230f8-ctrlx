@@ -15,7 +15,7 @@ set -uo pipefail
 export LC_ALL="${LC_ALL:-en_US.UTF-8}"
 cd "$(git rev-parse --show-toplevel)" || exit 1
 branch=team-chat
-# the channel lives in a private repo (setup.sh points ctrlx.chatRemote at the toolkit): every participant can read this one
+# ctrlx.chatRemote can point the channel at another remote; by default it lives in this repo
 remote=$(git config ctrlx.chatRemote 2>/dev/null || echo origin)
 ref="refs/remotes/$remote/$branch"
 me=$(git config ctrlx.role 2>/dev/null || true)

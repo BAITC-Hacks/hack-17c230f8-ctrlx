@@ -30,19 +30,11 @@ git config pull.rebase true
 git config rebase.autoStash true
 chmod +x .githooks/* scripts/*.sh 2>/dev/null || true
 echo "✔ pre-commit: проверка секретов и зон включена; git pull всегда с rebase"
-# every participant can read this repo, so the team channel goes through the private toolkit cloned next to it
-chat_url=$(git -C ../toolkit remote get-url origin 2>/dev/null || true)
-if [ -n "$chat_url" ]; then
-  git remote get-url teamchat >/dev/null 2>&1 || git remote add teamchat "$chat_url"
-  git remote set-url teamchat "$chat_url"
-  git config ctrlx.chatRemote teamchat
-  git fetch -q teamchat +refs/heads/team-chat:refs/remotes/teamchat/team-chat 2>/dev/null || true
-  git config ctrlx.chatSeen >/dev/null 2>&1 ||
-    git config ctrlx.chatSeen "$(git show refs/remotes/teamchat/team-chat:CHAT.md 2>/dev/null | grep -c '^- ')"
-  echo "✔ канал команды приватный: идёт через тулкит, в этом репо его не видно"
-else
-  echo "⚠ рядом нет ../toolkit — канал команды пойдёт в этот репо, а его читают все участники. Склонируй тулкит рядом и повтори scripts/setup.sh"
+# the team channel lives in this repo (branch team-chat); a clone pointed elsewhere earlier switches back and rereads it
+if [ "$(git config ctrlx.chatRemote 2>/dev/null || echo origin)" != origin ]; then
+  git config --unset ctrlx.chatRemote; git remote remove teamchat 2>/dev/null || true; git config ctrlx.chatSeen 0
 fi
+echo "✔ канал команды: scripts/msg.sh (ветка team-chat в этом репо)"
 
 if [ -z "$login" ]; then echo "⚠ gh не залогинен: push пойдёт через твой обычный git-логин. Проверь: git push --dry-run"; fi
 
