@@ -259,8 +259,15 @@ function dateInQuestion(q: string): string | null {
     const m = MONTHS_GEN.findIndex((name) => name.startsWith(words[2].slice(0, 3)));
     if (m >= 0) return `2026-${String(m + 1).padStart(2, "0")}-${words[1].padStart(2, "0")}`;
   }
-  const dots = q.match(/\b(\d{1,2})[./](\d{1,2})\b/);
-  if (dots) return `2026-${dots[2].padStart(2, "0")}-${dots[1].padStart(2, "0")}`;
+  // «03.02»: two digits after the dot, not a decimal like «2.5 МВт» or a time like «12.00»
+  const dots = q.match(/(?<!\d)(\d{1,2})[./](\d{2})(?![\d.:])/);
+  if (dots) {
+    const day = Number(dots[1]);
+    const month = Number(dots[2]);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `2026-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
   return null;
 }
 
@@ -343,7 +350,12 @@ function AskScreen() {
     if (!question || !current || pending) return;
     // a date inside the question picks the issue whose «сегодня» is that day (issue = day − 1)
     const asked = dateInQuestion(question);
-    const target = asked ? (issues ?? []).find((i) => shiftDay(i.issue_date, 1) === asked) : undefined;
+    // the day is «сегодня» of one issue or, for the last day, «завтра» of the previous one
+    const list = issues ?? [];
+    const target = asked
+      ? (list.find((i) => shiftDay(i.issue_date, 1) === asked) ??
+        list.find((i) => shiftDay(i.issue_date, 2) === asked))
+      : undefined;
     if (asked && !target) {
       const id = ++seq.current;
       setHistory((h) => ({

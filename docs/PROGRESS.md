@@ -75,3 +75,4 @@
 - 17:33 · mustafa · Мустафа · honesty guard: refuse issues whose forecast moment is in the future; no 12:00 recompute before it happens; docstring and README cleanup for live weather (R5) · тесты: pass
 - 17:38 · mustafa · Мустафа · ask screen: a date in the question selects the matching issue, the covered days are always shown, example questions in the placeholder (R9) · тесты: pass
 - 17:41 · mustafa · Мустафа · Fix live provenance and SCADA refresh; add jury brief (R1,R5,R6) · тесты: pass
+- 17:42 · mustafa · Мустафа · ask screen: date parser skips decimals and times, resolves the last test day via the previous issue (R9) · тесты: pass
