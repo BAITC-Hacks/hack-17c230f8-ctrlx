@@ -105,17 +105,13 @@ def weather_for_issue(
     model_name: str, t0: pd.Timestamp, refresh: bool
 ) -> tuple[pd.DataFrame, dict]:
     """The committed archive is the source of truth for the test period. For a date it does not
-    cover (or on --refresh) the agent requests the window [t0-2d, t0+3d] itself by the turbines'
+    cover, the agent requests the window [t0-30d, t0+3d] itself by the turbines'
     coordinates and overlays those hours; the committed cache files are never modified."""
     import json
     import urllib.request
 
     archive = fetch_weather(model_name, False)
-    try:
-        covered = archive_covers(archive, t0)
-    except (KeyError, TypeError, AttributeError):  # injected test frames without the raw columns
-        covered = True
-    info: dict = {"source": "archive", "covered": covered}
+    info: dict = {"source": "archive", "covered": archive_covers(archive, t0)}
     if info["covered"]:  # the test period always comes from the committed archive
         return archive, info
     start = (t0 - pd.Timedelta(days=30)).strftime("%Y-%m-%d")  # 30 d: source-shift baseline

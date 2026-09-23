@@ -388,6 +388,13 @@ def _build_issue(
 ) -> ForecastIssue:
     t_all = time.perf_counter()
     t0 = issue_time_utc(issue_date)
+    if t0 > pd.Timestamp.now(tz="UTC"):
+        # a real-time forecast for a day that has not started would log a 12:00 recompute that
+        # has not happened yet — refuse honestly instead of pretending
+        raise ValueError(
+            f"выпуск за {issue_date} ещё не наступил: момент прогноза {_when(t0)} (Алматы) "
+            "в будущем; выпуск делается по итогам дня"
+        )
     if tools.model().train_end > t0:
         # the model has already seen the facts of this period: such a "forecast" would leak
         raise ValueError(
@@ -569,6 +576,8 @@ def _build_issue(
     )
     later = sel1["lead"] >= config.CORRECTION_MIN_LEAD_H
     changed = int((sel1.loc[later, "field"] != sel.loc[later, "field"]).sum())
+    if t1 > pd.Timestamp.now(tz="UTC"):
+        changed = 0  # the 12:00 recompute moment has not come yet (real-time issue for today)
     val1 = tools.validate_weather(sel1, t0, config.INTRADAY_REFRESH_H) if changed else None
     pred1 = check1 = None
     if val1 is not None and val1["ok"] and used != "climatology":
