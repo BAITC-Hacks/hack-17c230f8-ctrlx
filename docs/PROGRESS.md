@@ -66,3 +66,4 @@
 - 17:17 · mustafa · Мустафа · LLM demo run (OpenAI gpt-4.1-mini): dispatcher summary passed the number check, committed in runs/llm_demo for experts without a key (R9) · тесты: pass
 - 17:20 · mustafa · Мустафа · Fix cross-platform feature precision and refresh evidence (R3,R7) · тесты: pass
 - 17:21 · mustafa · Мустафа · Publish portable model and fail checkpoint on staging errors (R3,R6,R7) · тесты: pass
+- 17:24 · amirkhan · Амирхан · docs(tasks): amirkhan — Windows verified on e3e7fb8 (29/29 CSV byte-identical, 203 tests), portability defect localized, audit hardening summary (R2, R6, R9) · тесты: pass
