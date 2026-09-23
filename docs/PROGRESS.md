@@ -40,3 +40,4 @@
 - 16:05 · amirkhan · Амирхан · feat(weather): request by both turbine coordinates (grid cells + same_cell in meta), fetch_issue_window live check of the issue window against the cache, cache re-downloaded for both points; tests (R2) · тесты: pass
 - 16:08 · mustafa · Мустафа · docker image carries model and results; self-check says no_facts when there is nothing to check; unrounded recompute deltas; regenerated outputs (R5, R6) · тесты: pass
 - 16:11 · ansar · Ансар · docs+ui: imbalance cost in tenge next to accuracy, TESTING log up to date (R6, R7, R8) · тесты: pass
+- 16:10 · amirkhan · Амирхан · feat(ask): ask-the-agent over run facts — template answers, LLM path with number grounding against the facts, tests (R9) · тесты: pass
