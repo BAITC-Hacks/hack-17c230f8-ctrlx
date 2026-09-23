@@ -1,12 +1,17 @@
 from fastapi.testclient import TestClient
 
-from app.config import HORIZON_H, INTRADAY_REFRESH_H
+from app.config import CORRECTION_MIN_LEAD_H, HORIZON_H
 from app.main import app
 
 client = TestClient(app)
 
 SAMPLE_DATE = "2026-01-31"
-SAMPLE_RUN = "20260201T0000-sample"
+
+
+def _run_id() -> str:
+    """run_id of the committed first test issue (the agent's output, not a hand-made sample)."""
+    items = [i for i in client.get("/api/issues").json() if i["issue_date"] == SAMPLE_DATE]
+    return items[0]["run_id"]
 
 
 def test_health_reports_demo_mode_without_key(monkeypatch):
@@ -34,7 +39,7 @@ def test_issues_include_the_sample_issue():
     items = client.get("/api/issues").json()
     sample = [i for i in items if i["issue_date"] == SAMPLE_DATE]
     assert len(sample) == 1, f"ожидался ровно один выпуск {SAMPLE_DATE}, получено {len(sample)}"
-    assert sample[0]["run_id"] == SAMPLE_RUN
+    assert sample[0]["run_id"].startswith("20260201T0000-")
     assert sample[0]["revisions"] >= 1
 
 
@@ -45,8 +50,8 @@ def test_forecast_returns_full_horizon():
     # rows carry every revision: rev 0 = full horizon at t0, rev 1 = recompute of the rest
     rev0 = [r for r in issue["rows"] if r["revision"] == 0]
     assert [r["lead_h"] for r in rev0] == list(range(HORIZON_H))
-    assert all(r["lead_h"] >= INTRADAY_REFRESH_H for r in issue["rows"] if r["revision"] == 1)
-    assert issue["run_id"] == SAMPLE_RUN
+    assert all(r["lead_h"] >= CORRECTION_MIN_LEAD_H for r in issue["rows"] if r["revision"] == 1)
+    assert issue["run_id"] == _run_id()
     assert issue["summary"], "summary должен приходить из runs/<run_id>/report.md"
 
 
@@ -59,7 +64,7 @@ def test_forecast_rows_carry_the_leakage_field():
 
 def test_forecast_warnings_come_from_the_agent_log():
     issue = client.get(f"/api/forecast/{SAMPLE_DATE}").json()
-    steps = client.get(f"/api/runs/{SAMPLE_RUN}/log").json()
+    steps = client.get(f"/api/runs/{_run_id()}/log").json()
     flagged = [s for s in steps if s["status"] in ("warn", "fail")]
     assert len(issue["warnings"]) == len(flagged)
 
@@ -69,7 +74,7 @@ def test_forecast_unknown_date_is_404():
 
 
 def test_run_log_has_the_agent_steps():
-    response = client.get(f"/api/runs/{SAMPLE_RUN}/log")
+    response = client.get(f"/api/runs/{_run_id()}/log")
     assert response.status_code == 200
     steps = response.json()
     assert len(steps) >= 7
@@ -88,7 +93,18 @@ def test_metrics_is_a_list_before_the_backtest():
     assert isinstance(response.json(), list)
 
 
-def test_post_run_is_503_until_the_agent_is_wired():
+def test_post_run_runs_the_agent(monkeypatch, tmp_path):
+    """POST /run goes through the real agent; outputs go to a temp dir, the repo stays clean."""
+    from datetime import date
+
+    from app.agent.orchestrator import run_issue
+    from app.api import routes
+
+    def run_in_tmp(issue_date: date, refresh: bool = False, llm: bool = False):
+        return run_issue(issue_date, out_dir=tmp_path / "f", runs_dir=tmp_path / "r")
+
+    monkeypatch.setattr(routes, "run_forecast", run_in_tmp)
     response = client.post("/api/run", json={"issue_date": SAMPLE_DATE})
-    assert response.status_code == 503
-    assert "агент" in response.json()["detail"]
+    assert response.status_code == 200
+    body = response.json()
+    assert len([r for r in body["issue"]["rows"] if r["revision"] == 0]) == HORIZON_H

@@ -66,6 +66,22 @@ WEATHER_MODELS = ("best_match", "gfs_seamless")  # primary, fallback / spread in
 PUBLISH_DELAY_H = 7
 MAX_PREVIOUS_DAY = 3
 INTRADAY_REFRESH_H = 12  # "input data updated": recompute at t0 + 12 h with fresher runs
+# Intraday corrections: not later than 2 h before the hour (wholesale market rules p. 97-99).
+CORRECTION_MIN_LEAD_H = INTRADAY_REFRESH_H + 2
+RATED_MW = 5.0  # VES "Nurly": 2 x Goldwind GW109/2500 (the whole plant is in the data)
+
+# Agent thresholds, fixed before any replay (see docs/SOLUTION.md, section 8.3).
+WS_VALID_RANGE = (0.0, 40.0)  # m/s
+MAX_MEAN_GAP_TO_POWER_CURVE = 0.25  # model vs physical prior, share of rated power
+FLATLINE_STD = 0.01  # a flat forecast while the wind is strong is a failure
+RAMP_DELTA, RAMP_HOURS = 0.3, 3  # ramp risk: |change| >= 0.3 of rated within 3 h
+CALM_LEVEL = 0.05
+COLD_RISK_TEMP = (-10.0, 1.0)  # °C, with forecast wind 5-8 m/s (winter under-production)
+COLD_RISK_WS = (5.0, 8.0)
+WIDE_INTERVAL = 0.6
+NWP_SPREAD_WS = 3.0  # m/s between best_match and gfs_seamless
+MATERIAL_MEAN_DELTA, MATERIAL_MAX_DELTA = 0.05, 0.2  # recompute counts as a real change
+DRIFT_T_STAT, DRIFT_DAYS = 2.0, 7
 
 
 def safe_previous_day(lead_h: int, hours_since_issue: int = 0) -> int:

@@ -18,3 +18,4 @@
 - 15:21 · mustafa · Мустафа · models: leak-safe issue simulation, power curve per field, LightGBM median + CQR quantiles; train and hold-out evaluate (Jan-2026 nMAE 15.4%, Feb-2025 17.7%) (R3, R7) · тесты: pass
 - 15:22 · amirkhan · Амирхан · docs(ideas): 8 ideas with measured numbers and sources for README (R10, IDEA-1..8) · тесты: pass
 - 15:25 · amirkhan · Амирхан · docs(ideas): idea 1 aligned with SOLUTION 7.5 — Nurly 5 MW, BR corridor ±5 %, contract regimes (IDEA-1) · тесты: pass
+- 15:26 · mustafa · Мустафа · agent: real orchestrator (validate, fallback ladder, recompute at t0+12h for hours >=2 h ahead, out-of-sample reflection, dispatcher report), 28-issue backtest + february_2026.csv, poison/determinism tests; API tests on real output (R4, R5) · тесты: pass

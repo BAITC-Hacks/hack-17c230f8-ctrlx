@@ -85,7 +85,8 @@ class WindCastModel:
             lo, hi = out["power_farm"] + res[0], out["power_farm"] + res[1]
         elif model_name == "climatology":
             local = pd.DatetimeIndex(x["target"]).tz_convert(LOCAL_TZ)
-            clim = self.climatology.reindex(list(zip(local.month, local.hour, strict=True))).to_numpy()
+            keys = list(zip(local.month, local.hour, strict=True))
+            clim = self.climatology.reindex(keys).to_numpy()
             out["power_farm"] = out["power_t1"] = out["power_t2"] = clim
             lo, hi = clim - 0.3, clim + 0.3
         else:

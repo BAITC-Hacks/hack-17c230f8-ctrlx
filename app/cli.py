@@ -43,13 +43,19 @@ def main(argv: list[str]) -> int:
             from app.service import forecast
 
             issue = forecast(args.issue, refresh=args.refresh, llm=args.llm)
-            print(issue.model_dump_json(indent=2, exclude={"rows"}))
+            print(issue.summary)
+            print(f"\nrun_id={issue.run_id} rows={len(issue.rows)} warnings={len(issue.warnings)}")
         elif args.cmd == "backtest":
             from app.service import backtest
 
             issues = backtest(args.start, args.end, refresh=args.refresh)
             for i in issues:
-                print(f"{i.issue_date} {i.run_id} {i.model_name} rows={len(i.rows)}")
+                warn = f" warnings={len(i.warnings)}" if i.warnings else ""
+                print(
+                    f"{i.issue_date} {i.run_id} {i.model_name} rev={i.revision} "
+                    f"rows={len(i.rows)}{warn}"
+                )
+            print("february_2026.csv written")
         elif args.cmd == "train":
             from app.train import main as train_main
 
