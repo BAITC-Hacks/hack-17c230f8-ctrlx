@@ -159,7 +159,9 @@ def main(argv: list[str]) -> int:
     result = evaluate(args.holdout)
     OUTPUTS_METRICS.mkdir(parents=True, exist_ok=True)
     out = OUTPUTS_METRICS / f"holdout_{args.holdout}.json"
-    out.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    out.write_text(
+        json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
     for r in result["rows"]:
         if r["horizon"] == "all":
             print(

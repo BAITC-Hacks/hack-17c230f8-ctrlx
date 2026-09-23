@@ -45,7 +45,7 @@ class RunLog:
             llm=llm,
         )
         self.steps.append(entry)
-        with self.path.open("a", encoding="utf-8") as f:
+        with self.path.open("a", encoding="utf-8", newline="\n") as f:
             f.write(json.dumps(entry.model_dump(mode="json"), ensure_ascii=False) + "\n")
         return entry
 

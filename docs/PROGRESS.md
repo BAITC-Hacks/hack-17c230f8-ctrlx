@@ -46,3 +46,4 @@
 - 16:13 · mustafa · Мустафа · README: February result file explained, live check, 5 fault cases, honest ledger wording (R4, R6) · тесты: pass
 - 16:14 · amirkhan · Амирхан · docs(tasks): amirkhan — R9 and clean-clone check done, freeze mode (R2, R9) · тесты: pass
 - 16:15 · amirkhan · Амирхан · docs(tasks): amirkhan — R9 and clean-clone check done, freeze mode; merge team progress lines (R2, R9) · тесты: pass
+- 16:19 · mustafa · Мустафа · model retrained on the current two-point weather archive; content-based run ids (same after retrain); LF output on every OS; all outputs, metrics, replay and faults regenerated; docs and README numbers updated (R3, R5, R6, R7) · тесты: pass

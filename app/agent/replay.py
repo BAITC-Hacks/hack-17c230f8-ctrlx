@@ -160,7 +160,7 @@ def replay(month: str = "2026-01") -> dict:
     }
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
     (EVIDENCE_DIR / f"replay_{month}.json").write_text(
-        json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
     )
     return result
 
@@ -242,6 +242,6 @@ def faults() -> dict:
     result = {"issue": FAULT_ISSUE.isoformat(), "horizon_h": config.HORIZON_H, "cases": out}
     EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
     (EVIDENCE_DIR / "faults.json").write_text(
-        json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
     )
     return result

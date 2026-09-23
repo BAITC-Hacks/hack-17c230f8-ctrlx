@@ -58,9 +58,13 @@ def _when(ts) -> str:
 
 
 def _run_id(issue_date: date, t0: pd.Timestamp) -> str:
-    meta = config.WEATHER_CACHE / "meta.json"
-    seed = f"{issue_date}|{tools.model().meta.get('created_at')}|"
-    seed += meta.read_text(encoding="utf-8") if meta.exists() else ""
+    """Content fingerprint, not wall-clock time: the same inputs and model give the same id."""
+    m = tools.model()
+    seed = f"{issue_date}|{m.train_end.isoformat()}|{m.cqr_qhat:.8f}|{m.meta.get('rows')}|"
+    for name in ("best_match", "gfs_seamless"):
+        cache = config.WEATHER_CACHE / f"prev_runs_{name}.json"
+        if cache.exists():
+            seed += hashlib.sha256(cache.read_bytes()).hexdigest()
     return f"{_local(t0):%Y%m%dT%H%M}-{hashlib.sha256(seed.encode()).hexdigest()[:6]}"
 
 
@@ -253,7 +257,7 @@ def _write_bid(rows0: list[dict], run_dir) -> str:
     )
     day = bid["hour_astana"].iloc[0][:10]
     path = run_dir / f"bid_{day}.csv"
-    bid.to_csv(path, index=False)
+    bid.to_csv(path, index=False, lineterminator="\n")
     return path.name
 
 
@@ -569,8 +573,10 @@ def run_issue(
         summary, llm_info, llm_note = _llm_summary(facts_json, template)
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"issue_{issue_date.isoformat()}.csv"
-    pd.DataFrame(rows0 + rows1, columns=FORECAST_COLUMNS).to_csv(path, index=False)
-    (log.dir / "report.md").write_text(summary + "\n", encoding="utf-8")
+    pd.DataFrame(rows0 + rows1, columns=FORECAST_COLUMNS).to_csv(
+        path, index=False, lineterminator="\n"
+    )
+    (log.dir / "report.md").write_text(summary + "\n", encoding="utf-8", newline="\n")
     bid_path = _write_bid(rows0, log.dir)
     log.step(
         "write_report",

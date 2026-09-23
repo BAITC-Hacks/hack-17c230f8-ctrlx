@@ -72,5 +72,5 @@ def write_february(issues: list[ForecastIssue]) -> pd.DataFrame:
     out["plan_mw"] = (out["power_farm_plan"] * RATED_MW).round(3)
     out["bid_mw"] = (out["power_farm_bid"] * RATED_MW).round(3)
     OUTPUTS_FORECASTS.mkdir(parents=True, exist_ok=True)
-    out.reset_index().to_csv(FEBRUARY_PATH, index=False)
+    out.reset_index().to_csv(FEBRUARY_PATH, index=False, lineterminator="\n")
     return out

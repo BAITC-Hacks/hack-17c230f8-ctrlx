@@ -18,7 +18,8 @@ def _run_id() -> str:
 
 
 def test_health_reports_demo_mode_without_key(monkeypatch):
-    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    for prefix in ("LLM", "LLM_FALLBACK"):  # .env.local may hold real keys on a dev machine
+        monkeypatch.delenv(f"{prefix}_API_KEY", raising=False)
     response = client.get("/api/health")
     assert response.status_code == 200
     body = response.json()

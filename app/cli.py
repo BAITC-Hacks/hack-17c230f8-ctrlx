@@ -4,6 +4,8 @@ forecast --issue 2026-01-31 [--refresh] [--llm]   one issue (obs day D, t0 = D+1
 backtest [--from 2026-01-31] [--to 2026-02-27]     sequential issues, writes outputs/forecasts/*
 train                                              fit models on data through TRAIN_END (app.train)
 evaluate --holdout 2026-01                         hold-out metrics vs baselines (app.evaluate)
+replay --month 2026-01                             re-live a month with facts: ablation + ledger
+faults                                             broken inputs: agent vs fixed pipeline
 """
 
 import argparse
