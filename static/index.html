@@ -150,6 +150,14 @@
   th:first-child, td:first-child { text-align: left; }
   th { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
   td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  /* ---- agentic evidence: ablation bars ---- */
+  .abl-row { display: grid; grid-template-columns: minmax(200px, 2fr) 3fr auto; gap: 12px; align-items: center; padding: 5px 0; }
+  .abl-name { font-size: 14px; color: var(--ink-soft); }
+  .abl-bar { background: var(--ground); border-radius: 3px; height: 14px; overflow: hidden; }
+  .abl-bar i { display: block; height: 100%; background: var(--grid); border-radius: 3px; }
+  .abl-v { font-family: var(--mono); font-size: 14px; font-weight: 600; }
+  @media (max-width: 700px) { .abl-row { grid-template-columns: 1fr auto; } .abl-bar { display: none; } }
+
   .empty { color: var(--ink-faint); font-size: 14px; }
   .err { color: var(--fail); font-size: 14px; }
 
@@ -206,6 +214,11 @@
       </section>
     </div>
   </div>
+
+  <section class="card" style="margin-top:16px" aria-labelledby="ev-h">
+    <h2 id="ev-h">Что даёт агент <span>измерено, а не заявлено</span></h2>
+    <div id="evidence"></div>
+  </section>
 </main>
 
 <script>
@@ -431,10 +444,95 @@ function renderMetrics(reports) {
     <table><thead><tr><th>модель</th><th>гориз.</th><th>MAE</th><th>nMAE</th><th>сдвиг</th><th>n</th></tr></thead>
     <tbody>${r.rows.map((m) => `<tr>
       <td>${m.model}</td><td class="num">${m.horizon}</td>
-      <td class="num">${m.mae.toFixed(3)}</td><td class="num">${(m.nmae * 100).toFixed(1)}%</td>
+      <td class="num">${m.mae.toFixed(3)}</td><td class="num">${m.nmae.toFixed(1)}%</td>
       <td class="num">${m.bias >= 0 ? "+" : ""}${m.bias.toFixed(3)}</td><td class="num">${m.n}</td>
     </tr>`).join("")}</tbody></table>
     <p class="stat-l" style="margin-top:8px">период ${r.period} · обучено до ${r.train_end}</p>`;
+}
+
+// The evidence JSON is written in English by the CLI; the page is Russian. Map what we know,
+// fall back to the original string so a new variant or decision still shows up verbatim.
+const RU = {
+  "A persistence (mean of the last 24 h)": "A — персистентность (среднее за 24 ч)",
+  "B fixed pipeline: power curve, no checks, no recompute": "B — фиксированный пайплайн: кривая мощности, без проверок",
+  "C model only: gradient boosting at t0, no recompute": "C — только модель: бустинг в t0, без пересчёта",
+  "D agent: checks, fallbacks, recompute at t0+12 h (published plan)": "D — агент: проверки, фолбэки, пересчёт в t0+12 ч",
+  "use gradient boosting instead of the power curve (analyze → accept)": "взять бустинг вместо кривой мощности",
+  "recompute at t0+12 h with fresher runs (revision 1)": "пересчёт в t0+12 ч по свежим прогонам",
+  "fallback to a simpler model after a failed check": "фолбэк на простую модель после провала проверки",
+  "switch the weather source after failed validation": "смена источника погоды после провала валидации",
+  "drift flag from the self-check (recommend retraining, no silent change)": "флаг дрейфа по самопроверке",
+  "6 hours of wind missing in the primary source": "в основном источнике нет 6 часов ветра",
+  "wind spike 100 m/s in the primary source": "выброс 100 м/с в основном источнике",
+  "primary source unavailable": "основной источник недоступен",
+  "both sources broken": "оба источника сломаны",
+  "switch → gfs_seamless": "переключился на gfs_seamless",
+  "climatology": "перешёл на климатологию",
+};
+const ru = (s) => RU[s] || s;
+
+function renderEvidence(ev) {
+  const box = $("evidence");
+  if (!ev || (!ev.replay && !ev.faults)) {
+    box.innerHTML = `<p class="empty">доказательства не сгенерированы — <code>uv run python -m app.cli replay --month 2026-01</code></p>`;
+    return;
+  }
+  const r = ev.replay, f = ev.faults;
+  let html = "";
+
+  if (r) {
+    // ablation: each variant's bar is scaled to the worst one, so the gain reads at a glance
+    const worst = Math.max(...r.ablation.map((a) => a.mae));
+    html += `<p class="stat-l" style="margin:0 0 10px">Один и тот же месяц (${r.month}), ${r.issues} выпусков,
+      ${r.rows_scored} оценённых часов. Меньше MAE — точнее.</p>
+      <div class="abl">${r.ablation.map((a, i) => `
+        <div class="abl-row">
+          <span class="abl-name">${ru(a.variant)}</span>
+          <span class="abl-bar"><i style="width:${(a.mae / worst) * 100}%;${i === r.ablation.length - 1 ? "background:var(--accent)" : ""}"></i></span>
+          <span class="num abl-v">${a.mae.toFixed(3)}</span>
+        </div>`).join("")}</div>`;
+
+    const fired = r.decisions.filter((d) => d.fired > 0);
+    const idle = r.decisions.filter((d) => !d.fired);
+    if (fired.length) {
+      html += `<table style="margin-top:14px"><thead><tr>
+        <th>решение агента</th><th>сработало</th><th>Δ MAE</th><th>95% ДИ</th></tr></thead><tbody>
+        ${fired.map((d) => {
+          const crosses = d.ci95 && d.ci95[0] < 0 && d.ci95[1] > 0;
+          return `<tr>
+            <td>${ru(d.decision)}</td>
+            <td class="num">${d.fired}</td>
+            <td class="num">${d.mean_delta_mae.toFixed(4)}</td>
+            <td class="num"${crosses ? ` style="color:var(--warn)"` : ""}>
+              ${d.ci95 ? `[${d.ci95[0].toFixed(4)}; ${d.ci95[1].toFixed(4)}]${crosses ? " ⚠" : ""}` : "—"}</td>
+          </tr>`;
+        }).join("")}</tbody></table>
+        <p class="stat-l" style="margin-top:8px">Отрицательная Δ — решение уменьшило ошибку.
+        ⚠ означает, что доверительный интервал пересекает ноль: выигрыш на этом месяце не доказан.</p>`;
+    }
+    if (idle.length) {
+      html += `<p class="stat-l" style="margin-top:6px">В нормальном режиме ни разу не сработали:
+        ${idle.map((d) => ru(d.decision)).join("; ")} — их ценность проверяется сценариями сбоев ниже.</p>`;
+    }
+  }
+
+  if (f) {
+    html += `<h3 style="font-size:14px;margin:18px 0 8px">Поведение при сбоях · выпуск ${f.issue}</h3>
+      <table><thead><tr><th>сбой</th><th>агент</th><th>фиксированный пайплайн</th></tr></thead><tbody>
+      ${f.cases.map((c) => {
+        const bad = c.fixed_pipeline.hours_from_broken_input;
+        return `<tr>
+          <td>${ru(c.case)}</td>
+          <td class="num" style="color:var(--accent)">${c.agent.valid_hours} ч · ${ru(c.agent.decision)}</td>
+          <td class="num"${c.fixed_pipeline.valid_hours < 48 || bad ? ` style="color:var(--warn)"` : ""}>
+            ${c.fixed_pipeline.valid_hours} ч${bad ? ` · ${bad} ч по битому входу` : ""}</td>
+        </tr>`;
+      }).join("")}</tbody></table>
+      <p class="stat-l" style="margin-top:8px">Агент выдал полный горизонт в
+        ${f.cases.filter((c) => c.agent.valid_hours === f.horizon_h).length} случаях из ${f.cases.length},
+        каждое решение записано в журнал прогона.</p>`;
+  }
+  box.innerHTML = html;
 }
 
 // ---------- load ----------
@@ -467,6 +565,7 @@ async function loadIssue() {
   } catch { $("mode").textContent = "—"; }
 
   renderMetrics(await api("/metrics").catch(() => []));
+  renderEvidence(await api("/evidence").catch(() => null));
 
   try {
     issues = await api("/issues");

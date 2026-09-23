@@ -157,6 +157,26 @@ def get_metrics() -> list[MetricsReport]:
     return reports
 
 
+@router.get("/evidence")
+def get_evidence() -> dict:
+    """Agentic evidence written by `app.cli replay` / `app.cli faults`, served as-is.
+
+    Deliberately not typed against app/schemas.py: these files are measurement output, not a
+    contract other modules build on, and their shape is owned by the CLI that produces them.
+    Missing files mean the evidence was not generated yet -- the page renders an empty state.
+    """
+    out: dict = {}
+    for key, pattern in (("replay", "replay_*.json"), ("faults", "faults.json")):
+        for path in sorted((OUTPUTS_FORECASTS.parent / "evidence").glob(pattern)):
+            try:
+                out[key] = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:
+                raise HTTPException(
+                    status_code=500, detail=f"{path.name}: не разбирается как JSON: {exc}"
+                ) from exc
+    return out
+
+
 @router.post("/run")
 def post_run(request: RunRequest) -> RunResponse:
     """Trigger one issue through the agent. 503 while the agent cannot run on this machine."""

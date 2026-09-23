@@ -29,3 +29,4 @@
 - 15:37 · mustafa · Мустафа · cli: forecast --llm --demo-dir for a committed LLM demo run without touching test outputs (R9) · тесты: pass
 - 15:45 · mustafa · Мустафа · models: docstring says HistGradientBoosting, not LightGBM (R3) · тесты: pass
 - 15:50 · mustafa · Мустафа · tz rules pinned to the tzdata package (no dependence on OS tz database); per-hour run provenance in weather validation + test; regenerated logs (R2, R5, R6) · тесты: pass
+- 15:51 · ansar · Ансар · feat: agentic evidence in README and on the page; fix nMAE shown 100x too high (R5, R6, R8) · тесты: pass
