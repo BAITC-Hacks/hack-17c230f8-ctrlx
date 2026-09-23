@@ -645,7 +645,7 @@ function Money({ report }: { report: MetricsReport }) {
     <Section
       title="Во что это в тенге"
       aside={<Badge variant="outline">верхняя оценка</Badge>}
-      description={`Штраф за небаланс за ${periodLabel(report.period)}, если бы суточную заявку подавали по прогнозу каждой модели.`}
+      description={`Штраф за небаланс по часам суточной заявки (опережение 24–47 ч) за ${periodLabel(report.period)}, если бы заявку подавали по прогнозу каждой модели.`}
     >
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">Для {periodLabel(report.period)} оценки в тенге нет.</p>
@@ -655,7 +655,7 @@ function Money({ report }: { report: MetricsReport }) {
             <TableHeader>
               <TableRow>
                 <TableHead>Модель</TableHead>
-                <TableHead className="text-right">Штраф за месяц</TableHead>
+                <TableHead className="text-right">Штраф за часы заявки</TableHead>
                 <TableHead className="text-right">Меньше, чем у персистентности</TableHead>
               </TableRow>
             </TableHeader>

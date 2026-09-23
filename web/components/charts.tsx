@@ -60,7 +60,7 @@ export function ForecastChart({ rows, series = "power_farm" }: {
         {station && <path d={band} className="fill-primary/15" />}
         <line x1={X(24)} x2={X(24)} y1={PAD.t} y2={H - PAD.b} className="stroke-foreground/40" strokeDasharray="4 4" />
         <text x={X(24) + 6} y={PAD.t + 12} className="fill-muted-foreground text-[11px]">
-          сутки D+2 · суточная заявка
+          сутки D+2 · заявка подаётся по версии до пересчёта
         </text>
         {Number.isFinite(firstRecomputed) && (
           <>

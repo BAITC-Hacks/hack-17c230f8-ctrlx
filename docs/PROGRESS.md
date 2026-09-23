@@ -60,3 +60,4 @@
 - 17:02 · mustafa · Мустафа · docs: PREPARED discloses the prepared Next.js starter used for web/ and its licenses (R6) · тесты: pass
 - 17:03 · mustafa · Мустафа · Protect monthly export and document release audit (R4,R6) · тесты: pass
 - 17:04 · mustafa · Мустафа · platform: integration screen for the customer's IT (architecture, API, formats, on-prem deployment, pilot roadmap); per-turbine MW in chart; honest pair counts and quantile sums (R8) · тесты: pass
+- 17:06 · mustafa · Мустафа · platform: honest wording — admissible by the 7 h rule (not a proven publication time), bid-hour costs, D+2 bid is the pre-recompute version (R8) · тесты: pass
