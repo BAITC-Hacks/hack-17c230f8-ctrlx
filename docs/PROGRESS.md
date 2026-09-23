@@ -70,3 +70,4 @@
 - 17:26 · ansar · Ансар · Fix dispatcher race and provenance export; verify fresh training and full backtest (R6,R8) · тесты: pass
 - 17:26 · mustafa · Мустафа · Finalize release evidence and accurate integration guidance (R6,R8,R9) · тесты: pass
 - 17:27 · ansar · Ансар · docs: README numbers match the 17:21 metrics and replay JSON (R6, R7) · тесты: pass
+- 17:30 · ansar · Ансар · Document final clean-clone verification and align replay evidence (R6,R8) · тесты: pass
