@@ -8,3 +8,4 @@
 - 14:19 · mustafa · Мустафа · kickoff: wind farm case (Samruk-Kazyna), contract, zones, tasks, data and weather cache (R1-R10) · тесты: pass
 - 14:31 · mustafa · Мустафа · roles: platform=ansar, data+models+agent=mustafa, weather+ideas=amirkhan; sample issue for the platform (R4, R8) · тесты: pass
 - 14:38 · amirkhan · Амирхан · feat: weather module with leak-safe previous-run selection and cache for both models (R2) · тесты: pass
+- 14:40 · ansar · Ансар · feat(api): forecast endpoints on the sample issue (R8) · тесты: pass
