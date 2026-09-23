@@ -114,14 +114,14 @@ const MONTH_COLUMNS: Column[] = [
     names: ["power_farm_plan", "power_t1_plan", "power_t2_plan"],
     meaning: "Последний прогноз на этот час: станция и каждая турбина.",
   },
-  { names: ["p10_plan", "p90_plan"], meaning: "Коридор: в 8 случаях из 10 факт внутри." },
+  { names: ["p10_plan", "p90_plan"], meaning: "Расчётный интервал p10–p90; фактическое покрытие проверяется на исторических данных." },
   {
     names: ["plan_revision", "plan_run_id"],
     meaning: "0 — прогноз в 00:00, 1 — уточнение в 12:00; журнал прогона в runs/<run_id>/.",
   },
   {
     names: ["power_farm_bid", "bid_run_id"],
-    meaning: "Заявка на этот час, поданная накануне до 08:00. Для 1 февраля пусто.",
+    meaning: "Черновик заявки из исходного выпуска D+2; автоматической подачи нет. Для 1 февраля пусто.",
   },
   { names: ["plan_mw", "bid_mw"], meaning: `План и заявка в МВт (мощность станции ${RATED_MW} МВт).` },
 ];
@@ -338,16 +338,16 @@ function ExpertNotes({ health }: { health: Health }) {
             </li>
             {health.kind === "ok" && (
               <li>
-                Сейчас: версия <Mono>{health.commit}</Mono>, сводки {health.mode === "llm" ? "пишет LLM" : "по шаблону, без LLM"}.
+                Сейчас: версия <Mono>{health.commit}</Mono>, {health.mode === "llm" ? "LLM настроена; доступ к провайдеру этим запросом не проверяется" : "сводки по шаблону, без LLM"}.
               </li>
             )}
           </ul>
           <CodeBlock code={"curl -s http://<адрес API>:8000/api/health"} />
         </Block>
 
-        <Block title="Ежедневный запуск">
+        <Block title="Ежедневный запуск — план пилота">
           <p className="text-muted-foreground">
-            В 07:00 по Астане — за час до подачи заявки в 08:00. Каждый запуск пишет журнал: он виден в{" "}
+            Пример для будущего пилота после подключения свежих погодных прогонов и SCADA. Это не готовая эксплуатационная интеграция. Журнал каждого запуска доступен в{" "}
             <Mono>GET /api/runs/{"{run_id}"}/log</Mono> и на экране{" "}
             <Link href="/agent" className="text-primary underline-offset-4 hover:underline">
               «Агент»
@@ -359,8 +359,8 @@ function ExpertNotes({ health }: { health: Health }) {
 
         <Block title="Форматы файлов">
           <p className="text-muted-foreground">
-            CSV в UTF-8, разделитель — запятая. Мощность в колонках без единиц — доля от мощности станции (0–1); чтобы
-            получить МВт, умножьте на {RATED_MW}.
+            CSV в UTF-8, разделитель — запятая. Мощность без единиц — доля собственного номинала (0–1):
+            для станции умножьте на {RATED_MW} МВт, для отдельной турбины — на {RATED_MW / 2} МВт.
           </p>
           <div className="flex flex-col gap-4 pt-2">
             <div>
@@ -523,7 +523,7 @@ function IntegrationScreen() {
         title="Запуск в контуре компании"
         help={
           <ul className="flex flex-col gap-2">
-            <li>Работает без ключей и без интернета: сводка собирается по шаблону.</li>
+            <li>После установки зависимостей основной сценарий работает без ключей и интернета: сводка собирается по шаблону.</li>
             <li>Ключи и адреса — только в .env.local, не в коде и не в образе.</li>
             <li>LLM лишь переписывает текст сводки. Числа считает код, и каждое сверяется.</li>
           </ul>

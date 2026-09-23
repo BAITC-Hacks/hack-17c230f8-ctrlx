@@ -68,3 +68,4 @@
 - 17:21 · mustafa · Мустафа · Publish portable model and fail checkpoint on staging errors (R3,R6,R7) · тесты: pass
 - 17:24 · amirkhan · Амирхан · docs(tasks): amirkhan — Windows verified on e3e7fb8 (29/29 CSV byte-identical, 203 tests), portability defect localized, audit hardening summary (R2, R6, R9) · тесты: pass
 - 17:26 · ansar · Ансар · Fix dispatcher race and provenance export; verify fresh training and full backtest (R6,R8) · тесты: pass
+- 17:26 · mustafa · Мустафа · Finalize release evidence and accurate integration guidance (R6,R8,R9) · тесты: pass
