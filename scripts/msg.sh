@@ -15,10 +15,12 @@ set -uo pipefail
 export LC_ALL="${LC_ALL:-en_US.UTF-8}"
 cd "$(git rev-parse --show-toplevel)" || exit 1
 branch=team-chat
-ref="refs/remotes/origin/$branch"
+# the channel lives in a private repo (setup.sh points ctrlx.chatRemote at the toolkit): every participant can read this one
+remote=$(git config ctrlx.chatRemote 2>/dev/null || echo origin)
+ref="refs/remotes/$remote/$branch"
 me=$(git config ctrlx.role 2>/dev/null || true)
 
-fetch() { git fetch -q origin "+refs/heads/$branch:$ref" 2>/dev/null; }
+fetch() { git fetch -q "$remote" "+refs/heads/$branch:$ref" 2>/dev/null; }
 # hooks and the status line must stay instant: refresh in the background, at most once per $1 seconds
 fetch_lazy() {
   local stamp last
@@ -61,7 +63,7 @@ send() {
     blob=$(git hash-object -w "$tmp")
     tree=$(printf '100644 blob %s\tCHAT.md\n' "$blob" | git mktree)
     commit=$(git commit-tree "$tree" ${base:+-p "$base"} -m "[$me] chat → $to")
-    if git push -q origin "$commit:refs/heads/$branch" 2>/dev/null; then
+    if git push -q "$remote" "$commit:refs/heads/$branch" 2>/dev/null; then
       git update-ref "$ref" "$commit"; rm -f "$tmp"
       echo "✔ отправлено → $to"; return 0
     fi
