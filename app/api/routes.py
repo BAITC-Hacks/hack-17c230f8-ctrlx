@@ -4,9 +4,10 @@ Contract: GET /issues -> list[IssueListItem]; GET /forecast/{issue_date} -> Fore
 GET /metrics -> list[MetricsReport]; GET /runs/{run_id}/log -> list[AgentStep];
 POST /run (RunRequest) -> RunResponse.
 
-Until the agent lands (R4/R5), everything is read off disk: `outputs/forecasts/issue_*.csv`,
+Everything except POST /run is read off disk: `outputs/forecasts/issue_*.csv`,
 `runs/<run_id>/{agent_log.jsonl,report.md}` and `outputs/metrics/*.json`. Those paths belong to
-the lead's zone -- read-only here.
+the lead's zone -- read-only here. That split is deliberate: the read path has no dependency on
+the model stack, so the API and the page keep working wherever the agent itself cannot run.
 """
 
 import csv
@@ -27,12 +28,29 @@ from app.schemas import (
     RunRequest,
     RunResponse,
 )
-from app.service import forecast as run_forecast
 
 router = APIRouter()
 
 ISSUE_PREFIX = "issue_"
 AGENT_NOT_WIRED = "агент ещё не подключён"
+AGENT_UNAVAILABLE = (
+    "агент недоступен на этой машине: не загружается библиотека моделей. "
+    "Чтение готовых выпусков и страница работают; см. README → «Ограничения»."
+)
+
+
+def run_forecast(issue_date, *, refresh: bool = False, llm: bool = False):
+    """Indirection to the agent, kept at module level so tests can substitute it.
+
+    `app.service` is imported inside the call, not at module import: it pulls in the model
+    stack, whose native libraries may be missing on a given OS (LightGBM needs an OpenMP
+    runtime that no lockfile can install). Everything else this router serves is read off
+    disk, so the API, the page and their tests must not die because a model library does not
+    load — only POST /run degrades, to a 503.
+    """
+    from app.service import forecast
+
+    return forecast(issue_date, refresh=refresh, llm=llm)
 
 
 def _issue_path(issue_date: date):
@@ -141,11 +159,14 @@ def get_metrics() -> list[MetricsReport]:
 
 @router.post("/run")
 def post_run(request: RunRequest) -> RunResponse:
-    """Trigger one issue through the agent. 503 until the orchestrator is wired (R4/R5)."""
+    """Trigger one issue through the agent. 503 while the agent cannot run on this machine."""
     try:
         issue = run_forecast(request.issue_date, refresh=request.refresh, llm=request.llm)
     except NotImplementedError as exc:
         raise HTTPException(status_code=503, detail=AGENT_NOT_WIRED) from exc
+    except (ImportError, OSError) as exc:
+        # the model stack does not load on this OS -- reading finished issues still works
+        raise HTTPException(status_code=503, detail=AGENT_UNAVAILABLE) from exc
     return RunResponse(
         run_id=issue.run_id,
         issue=issue,
