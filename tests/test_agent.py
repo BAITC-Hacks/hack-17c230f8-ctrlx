@@ -48,6 +48,7 @@ def test_issue_has_full_horizon_and_every_agent_step(issue_run):
 def test_every_row_uses_a_run_published_before_the_issue(issue_run):
     issue, _, _ = issue_run
     for r in issue.rows:
+        assert r.wx_field != "none", "a normal issue has admissible weather for every hour"
         hours_since = config.INTRADAY_REFRESH_H if r.revision == 1 else 0
         n = int(r.wx_field.removeprefix("day"))
         assert n >= config.safe_previous_day(r.lead_h, hours_since), r

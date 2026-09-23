@@ -44,7 +44,7 @@ ISSUE_WEATHER_COLUMNS = [
     "gust10",
 ]
 
-WxField = Literal["day1", "day2", "day3"]
+WxField = Literal["day1", "day2", "day3", "none"]  # none: no admissible weather, climatology
 Horizon = Literal["24h", "48h"]
 ModelName = Literal["persistence", "power_curve", "gbm", "climatology"]
 

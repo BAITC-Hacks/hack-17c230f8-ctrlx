@@ -1,0 +1,62 @@
+{
+  "issue": "2026-02-09",
+  "horizon_h": 48,
+  "cases": [
+    {
+      "case": "6 hours of wind missing in the primary source",
+      "agent": {
+        "valid_hours": 48,
+        "model": "power_curve",
+        "decision": "switch → gfs_seamless",
+        "reason": "основной источник не прошёл проверку"
+      },
+      "fixed_pipeline": {
+        "valid_hours": 42,
+        "hours_from_broken_input": 0,
+        "note": "no checks: broken input is used as is"
+      }
+    },
+    {
+      "case": "wind spike 100 m/s in the primary source",
+      "agent": {
+        "valid_hours": 48,
+        "model": "power_curve",
+        "decision": "switch → gfs_seamless",
+        "reason": "основной источник не прошёл проверку"
+      },
+      "fixed_pipeline": {
+        "valid_hours": 48,
+        "hours_from_broken_input": 6,
+        "note": "no checks: broken input is used as is"
+      }
+    },
+    {
+      "case": "primary source unavailable",
+      "agent": {
+        "valid_hours": 48,
+        "model": "power_curve",
+        "decision": "switch → gfs_seamless",
+        "reason": "основной источник не прошёл проверку"
+      },
+      "fixed_pipeline": {
+        "valid_hours": 0,
+        "hours_from_broken_input": 0,
+        "note": "no checks: broken input is used as is"
+      }
+    },
+    {
+      "case": "both sources broken",
+      "agent": {
+        "valid_hours": 48,
+        "model": "climatology",
+        "decision": "climatology",
+        "reason": "ни один источник погоды не прошёл проверку"
+      },
+      "fixed_pipeline": {
+        "valid_hours": 42,
+        "hours_from_broken_input": 0,
+        "note": "no checks: broken input is used as is"
+      }
+    }
+  ]
+}

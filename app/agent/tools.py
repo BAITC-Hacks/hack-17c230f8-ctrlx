@@ -37,22 +37,45 @@ def facts() -> pd.DataFrame:
     return farm_hourly()
 
 
-@cache
+_OVERRIDES: dict = {}  # replay / fault injection: swap the model or a weather source in memory
+
+
+def use(model_obj: WindCastModel | None = None, **weather_frames: pd.DataFrame | None) -> None:
+    """Replace the trained model and/or weather frames (None restores the default)."""
+    _OVERRIDES["model"] = model_obj
+    for name, frame in weather_frames.items():
+        _OVERRIDES[f"wx:{name}"] = frame
+
+
 def model() -> WindCastModel:
+    return _OVERRIDES.get("model") or _load_default_model()
+
+
+@cache
+def _load_default_model() -> WindCastModel:
     return load_model()
 
 
-@cache
 def _weather(name: str, refresh: bool) -> pd.DataFrame:
+    frame = _OVERRIDES.get(f"wx:{name}")
+    return frame if frame is not None else _load_weather(name, refresh)
+
+
+@cache
+def _load_weather(name: str, refresh: bool) -> pd.DataFrame:
     return weather.load_or_fetch(name, refresh=refresh)
 
 
-@cache
 def gfs_curves() -> dict:
+    return _gfs_curves(model().train_end)
+
+
+@cache
+def _gfs_curves(train_end: pd.Timestamp) -> dict:
     """Power curves on gfs_seamless wind, used only when the primary source fails validation."""
-    wx = _weather("gfs_seamless", False).set_index("time_utc")
+    wx = _load_weather("gfs_seamless", False).set_index("time_utc")
     hist = wx.join(facts()[["p"]], how="inner")
-    hist = hist[hist.index < model().train_end]
+    hist = hist[hist.index < train_end]
     return {n: PowerCurve().fit(hist[f"ws100_d{n}"], hist["p"]) for n in (1, 2, 3)}
 
 
@@ -205,7 +228,8 @@ def reflect(t0: pd.Timestamp, out_dir) -> dict:
 def nwp_offset(wx: pd.DataFrame, wg: pd.DataFrame, t0: pd.Timestamp) -> float:
     a = wx.set_index("time_utc")["ws100_d2"]
     b = wg.set_index("time_utc")["ws100_d2"]
-    d = (a - b)[(a.index >= t0 - pd.Timedelta(days=30)) & (a.index < t0 - pd.Timedelta(days=2))]
+    d = a - b  # aligned on time; empty or missing sources give an empty series
+    d = d[(d.index >= t0 - pd.Timedelta(days=30)) & (d.index < t0 - pd.Timedelta(days=2))]
     return float(d.median()) if d.notna().any() else 0.0
 
 

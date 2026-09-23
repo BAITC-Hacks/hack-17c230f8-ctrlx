@@ -7,6 +7,7 @@ evaluate --holdout 2026-01                         hold-out metrics vs baselines
 """
 
 import argparse
+import json
 import sys
 from datetime import date
 
@@ -29,6 +30,12 @@ def _parser() -> argparse.ArgumentParser:
     b.add_argument("--refresh", action="store_true")
 
     sub.add_parser("train", help="fit models (app.train)")
+
+    r = sub.add_parser(
+        "replay", help="re-live a month with known facts: ablation + decision ledger"
+    )
+    r.add_argument("--month", default="2026-01", help="YYYY-MM")
+    sub.add_parser("faults", help="broken inputs: agent vs fixed pipeline")
 
     e = sub.add_parser("evaluate", help="hold-out metrics (app.evaluate)")
     e.add_argument("--holdout", default="2026-01", help="YYYY-MM")
@@ -56,6 +63,14 @@ def main(argv: list[str]) -> int:
                     f"rows={len(i.rows)}{warn}"
                 )
             print("february_2026.csv written")
+        elif args.cmd == "replay":
+            from app.agent.replay import replay
+
+            print(json.dumps(replay(args.month), ensure_ascii=False, indent=1))
+        elif args.cmd == "faults":
+            from app.agent.replay import faults
+
+            print(json.dumps(faults(), ensure_ascii=False, indent=1))
         elif args.cmd == "train":
             from app.train import main as train_main
 

@@ -84,7 +84,7 @@ def _rows(pred, sel, t0, revision, model_name, wx_model, fallback, run_id) -> li
                 p10=round(float(pred["p10"].iloc[i]), 4),
                 p90=round(float(pred["p90"].iloc[i]), 4),
                 ws100_fc=round(float(sel["ws100"].iloc[i]), 2),
-                wx_field=f"day{int(sel['field'].iloc[i])}",
+                wx_field=f"day{int(sel['field'].iloc[i])}" if sel["field"].iloc[i] > 0 else "none",
                 wx_model=wx_model,
                 model_name=model_name,
                 fallback_used=fallback,
@@ -256,8 +256,9 @@ def _llm_summary(facts_text: str, template: str) -> tuple[str, LlmInfo | None, s
     from app.llm import last_provider
 
     used = last_provider()
-    info = LlmInfo(provider=used.get("provider", ""), model=used.get("model", ""),
-                   tokens=used.get("tokens", 0))
+    info = LlmInfo(
+        provider=used.get("provider", ""), model=used.get("model", ""), tokens=used.get("tokens", 0)
+    )
     if extra:
         return template, info, f"llm_rejected: числа не из фактов ({', '.join(extra[:3])})"
     return res.summary, info, "сводка LLM прошла проверку чисел"

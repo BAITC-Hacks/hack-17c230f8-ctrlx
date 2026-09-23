@@ -1,0 +1,63 @@
+{
+  "month": "2026-01",
+  "train_end_utc": "2025-12-31T19:00:00+00:00",
+  "issues": 31,
+  "rows_scored": 1464,
+  "note": "negative delta = the decision reduced MAE against the facts",
+  "ablation": [
+    {
+      "variant": "A persistence (mean of the last 24 h)",
+      "mae": 0.3066
+    },
+    {
+      "variant": "B fixed pipeline: power curve, no checks, no recompute",
+      "mae": 0.1948
+    },
+    {
+      "variant": "C model only: gradient boosting at t0, no recompute",
+      "mae": 0.1553
+    },
+    {
+      "variant": "D agent: checks, fallbacks, recompute at t0+12 h (published plan)",
+      "mae": 0.1509
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "use gradient boosting instead of the power curve (analyze → accept)",
+      "fired": 31,
+      "mean_delta_mae": -0.0398,
+      "ci95": [
+        -0.0556,
+        -0.0244
+      ],
+      "wins": 23
+    },
+    {
+      "decision": "recompute at t0+12 h with fresher runs (revision 1)",
+      "fired": 31,
+      "mean_delta_mae": -0.0063,
+      "ci95": [
+        -0.0152,
+        0.0018
+      ],
+      "wins": 19
+    },
+    {
+      "decision": "fallback to a simpler model after a failed check",
+      "fired": 0,
+      "mean_delta_mae": null
+    },
+    {
+      "decision": "switch the weather source after failed validation",
+      "fired": 0,
+      "mean_delta_mae": null
+    },
+    {
+      "decision": "drift flag from the self-check (recommend retraining, no silent change)",
+      "fired": 0,
+      "mean_delta_mae": null,
+      "t_stats": []
+    }
+  ]
+}
