@@ -2,20 +2,84 @@
   "source": "Open-Meteo Previous Runs API (https://open-meteo.com/en/docs/previous-runs-api)",
   "models": {
     "best_match": {
-      "url": "https://previous-runs-api.open-meteo.com/v1/forecast?latitude=43.645150&longitude=78.535604&wind_speed_unit=ms&timezone=GMT&hourly=wind_speed_100m_previous_day1,wind_speed_100m_previous_day2,wind_speed_100m_previous_day3,wind_speed_10m_previous_day1,wind_speed_10m_previous_day2,wind_speed_10m_previous_day3,wind_direction_100m_previous_day2,temperature_2m_previous_day2,wind_gusts_10m_previous_day2&start_date=2024-02-15&end_date=2026-03-02&models=best_match",
-      "fetched_at": "2026-09-23T09:37:24+00:00",
-      "sha256": "bb67e93e43bf45030298deda3b9d5808ec8c2bab55014b96ac5402b4d36bd35c",
+      "url": "https://previous-runs-api.open-meteo.com/v1/forecast?latitude=43.645150,43.643198&longitude=78.535604,78.538828&wind_speed_unit=ms&timezone=GMT&hourly=wind_speed_100m_previous_day1,wind_speed_100m_previous_day2,wind_speed_100m_previous_day3,wind_speed_10m_previous_day1,wind_speed_10m_previous_day2,wind_speed_10m_previous_day3,wind_direction_100m_previous_day2,temperature_2m_previous_day2,wind_gusts_10m_previous_day2&start_date=2024-02-15&end_date=2026-03-02&models=best_match",
+      "fetched_at": "2026-09-23T11:05:03+00:00",
+      "sha256": "8dd501b65c9b74bf79d8ec81b5c30949a9432e92c32a7397a4a2aba2ed2ec965",
       "start_date": "2024-02-15",
       "end_date": "2026-03-02",
-      "timezone": "GMT"
+      "timezone": "GMT",
+      "points": [
+        [
+          43.64515,
+          78.535604
+        ],
+        [
+          43.643198,
+          78.538828
+        ]
+      ],
+      "cells": [
+        {
+          "point": 1,
+          "grid_lat": 43.620384,
+          "grid_lon": 78.47891,
+          "elevation": 555.0,
+          "turbine": 1,
+          "lat": 43.64515,
+          "lon": 78.535604
+        },
+        {
+          "point": 2,
+          "grid_lat": 43.620384,
+          "grid_lon": 78.47891,
+          "elevation": 555.0,
+          "turbine": 2,
+          "lat": 43.643198,
+          "lon": 78.538828
+        }
+      ],
+      "same_cell": true,
+      "publish_delay_h": 7
     },
     "gfs_seamless": {
-      "url": "https://previous-runs-api.open-meteo.com/v1/forecast?latitude=43.645150&longitude=78.535604&wind_speed_unit=ms&timezone=GMT&hourly=wind_speed_100m_previous_day1,wind_speed_100m_previous_day2,wind_speed_100m_previous_day3,wind_speed_10m_previous_day1,wind_speed_10m_previous_day2,wind_speed_10m_previous_day3,wind_direction_100m_previous_day2,temperature_2m_previous_day2,wind_gusts_10m_previous_day2&start_date=2024-02-15&end_date=2026-03-02&models=gfs_seamless",
-      "fetched_at": "2026-09-23T09:37:26+00:00",
-      "sha256": "347fe8aad77c177cfcf074b008cd7790919e05d2adb3480653ccd6b54359c57c",
+      "url": "https://previous-runs-api.open-meteo.com/v1/forecast?latitude=43.645150,43.643198&longitude=78.535604,78.538828&wind_speed_unit=ms&timezone=GMT&hourly=wind_speed_100m_previous_day1,wind_speed_100m_previous_day2,wind_speed_100m_previous_day3,wind_speed_10m_previous_day1,wind_speed_10m_previous_day2,wind_speed_10m_previous_day3,wind_direction_100m_previous_day2,temperature_2m_previous_day2,wind_gusts_10m_previous_day2&start_date=2024-02-15&end_date=2026-03-02&models=gfs_seamless",
+      "fetched_at": "2026-09-23T11:05:07+00:00",
+      "sha256": "7ff696f7c3ced75372500b152094af0bbb162c12ce522e301c1316a198833d43",
       "start_date": "2024-02-15",
       "end_date": "2026-03-02",
-      "timezone": "GMT"
+      "timezone": "GMT",
+      "points": [
+        [
+          43.64515,
+          78.535604
+        ],
+        [
+          43.643198,
+          78.538828
+        ]
+      ],
+      "cells": [
+        {
+          "point": 1,
+          "grid_lat": 43.638138,
+          "grid_lon": 78.515625,
+          "elevation": 555.0,
+          "turbine": 1,
+          "lat": 43.64515,
+          "lon": 78.535604
+        },
+        {
+          "point": 2,
+          "grid_lat": 43.638138,
+          "grid_lon": 78.515625,
+          "elevation": 555.0,
+          "turbine": 2,
+          "lat": 43.643198,
+          "lon": 78.538828
+        }
+      ],
+      "same_cell": true,
+      "publish_delay_h": 7
     }
   }
 }

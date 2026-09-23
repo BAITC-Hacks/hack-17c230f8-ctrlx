@@ -96,6 +96,72 @@ def test_values_come_from_the_safe_run_only(day, hours_since_issue):
         assert temp == 20 + min(lead, last_safe)  # day2-only fields are carried backward only
 
 
+def _payload_from(frame: pd.DataFrame, lat: float, lon: float) -> dict:
+    """Rebuild an Open-Meteo-like JSON object (one point) from a WEATHER_COLUMNS frame."""
+    hourly = {"time": [t.strftime("%Y-%m-%dT%H:%M") for t in frame["time_utc"]]}
+    for api_name, col in weather.API_VARS.items():
+        hourly[api_name] = [None if pd.isna(v) else float(v) for v in frame[col]]
+    return {"latitude": lat, "longitude": lon, "elevation": 555.0, "hourly": hourly}
+
+
+class _Response:
+    def __init__(self, payload):
+        self.raw = json.dumps(payload).encode()
+
+    def read(self):
+        return self.raw
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def test_request_goes_by_both_turbine_coordinates():
+    url = weather.build_url("best_match")
+    assert "latitude=43.645150,43.643198" in url and "longitude=78.535604,78.538828" in url
+
+
+def test_to_frame_accepts_one_point_and_a_list_of_points():
+    base = _synthetic(T0_FIRST)
+    single = weather.to_frame(_payload_from(base, 43.62, 78.48))
+    assert list(single.columns) == WEATHER_COLUMNS and len(single.attrs["cells"]) == 1
+    second = base.copy()
+    second["ws100_d1"] += 2.0  # the other turbine's cell reports slightly more wind
+    cell = (43.62, 78.48)
+    both = weather.to_frame([_payload_from(base, *cell), _payload_from(second, *cell)])
+    assert list(both.columns) == WEATHER_COLUMNS and len(both) == len(base)
+    assert both.attrs["same_cell"] is True and both.attrs["cells"][1]["turbine"] == 2
+    assert np.allclose(both["ws100_d1"], base["ws100_d1"] + 1.0)  # farm series = mean of points
+    assert np.allclose(both["dir100_d2"], base["dir100_d2"] % 360)  # circular mean of equal angles
+    other_cell = weather.to_frame([_payload_from(base, *cell), _payload_from(base, 43.9, 78.7)])
+    assert other_cell.attrs["same_cell"] is False
+
+
+def test_fetch_issue_window_offline_never_raises(monkeypatch):
+    monkeypatch.setattr(
+        weather.urllib.request, "urlopen", lambda *a, **k: (_ for _ in ()).throw(OSError("down"))
+    )
+    result = weather.fetch_issue_window(T0_FIRST)
+    assert result["live"] is False and "down" in result["reason"]
+
+
+def test_fetch_issue_window_compares_live_answer_with_cache(monkeypatch, wx):
+    last = T0_FIRST + pd.Timedelta(hours=config.HORIZON_H - 1)
+    window = wx[(wx["time_utc"] >= T0_FIRST) & (wx["time_utc"] <= last)].reset_index(drop=True)
+    points = [_payload_from(window, lat, lon) for lat, lon in weather.turbine_points()]
+    monkeypatch.setattr(weather.urllib.request, "urlopen", lambda *a, **k: _Response(points))
+    same = weather.fetch_issue_window(T0_FIRST)
+    assert same["live"] is True and same["rows"] == config.HORIZON_H and same["mismatches"] == 0
+    changed = window.copy()
+    changed.loc[5, "ws100_d1"] = changed.loc[5, "ws100_d1"] + 1.0
+    points = [_payload_from(changed, lat, lon) for lat, lon in weather.turbine_points()]
+    monkeypatch.setattr(weather.urllib.request, "urlopen", lambda *a, **k: _Response(points))
+    differs = weather.fetch_issue_window(T0_FIRST)
+    assert differs["mismatches"] == 1 and differs["max_abs_diff"] == pytest.approx(1.0)
+
+
 def test_missing_safe_run_falls_back_to_older_never_fresher():
     wx, lead = _synthetic(T0_FIRST), 20  # lead 20 -> day2 is the safe run
     assert config.safe_previous_day(lead) == 2
