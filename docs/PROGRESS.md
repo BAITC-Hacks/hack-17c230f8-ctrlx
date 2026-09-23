@@ -32,3 +32,4 @@
 - 15:51 · ansar · Ансар · feat: agentic evidence in README and on the page; fix nMAE shown 100x too high (R5, R6, R8) · тесты: pass
 - 15:50 · mustafa · Мустафа · docs: REQUIREMENTS statuses and contract match the implementation (tz, delay 7 h, models, rev1 >= 2 h) (R1-R10) · тесты: pass
 - 15:54 · mustafa · Мустафа · README: facts match the code — leak rule 7 h (16/40), UTC+5 clock, VES Nurly 5 MW, bid alignment, quick start with backtest, metrics table, LLM fallback vars, sha256 LF vs CRLF (R6) · тесты: pass
+- 15:57 · ansar · Ансар · fix(security): contain run_id to a child of runs/, escape agent text before innerHTML (R8) · тесты: pass

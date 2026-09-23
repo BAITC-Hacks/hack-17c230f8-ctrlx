@@ -228,6 +228,11 @@ const api = async (p) => {
   if (!r.ok) throw new Error(`${p} → ${r.status}`);
   return r.json();
 };
+// Everything the API returns is text we did not write: the dispatcher summary comes from
+// report.md (an LLM writes it once R9 lands) and the agent's own summary/decision/reason strings.
+// It all lands in innerHTML, so escape before interpolating.
+const esc = (s) =>
+  String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const pct = (v) => `${Math.round(v * 100)}%`;
 const hhmm = (iso) => iso.slice(11, 16);
 const dm = (iso) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
@@ -357,7 +362,7 @@ function wireHover(x, y, val) {
     const was = superseded.find((q) => +q.lead_h === +r.lead_h);
     tip.innerHTML = `<b>${dm(r.target_time_local)} ${hhmm(r.target_time_local)}</b> · +${r.lead_h} ч
       <br>выработка <span class="num">${pct(val(r))}</span> · p10–p90 <span class="num">${pct(+r.p10)}–${pct(+r.p90)}</span>
-      <br>ветер <span class="num">${(+r.ws100_fc).toFixed(1)}</span> м/с · погода ${r.wx_field}
+      <br>ветер <span class="num">${(+r.ws100_fc).toFixed(1)}</span> м/с · погода ${esc(r.wx_field)}
       ${was ? `<br>до пересчёта было <span class="num">${pct(+was[series])}</span>` : ""}`;
     tip.style.left = `${(cx / W) * 100}%`;
     tip.style.top = `${(y(val(r)) / H) * box.height - 12}px`;
@@ -413,9 +418,9 @@ function renderTrace(steps) {
     <li data-st="${s.status}" style="animation-delay:${Math.min(i * 50, 400)}ms">
       <span class="n">${s.step}</span>
       <div>
-        <div class="tool">${s.tool}</div>
-        <div class="sum">${s.summary}</div>
-        ${s.decision ? `<div class="dec"><b>${s.decision}</b>${s.reason ? ` — ${s.reason}` : ""}</div>` : ""}
+        <div class="tool">${esc(s.tool)}</div>
+        <div class="sum">${esc(s.summary)}</div>
+        ${s.decision ? `<div class="dec"><b>${esc(s.decision)}</b>${s.reason ? ` — ${esc(s.reason)}` : ""}</div>` : ""}
       </div>
       <div style="text-align:right">
         <div class="st" data-st="${s.status}">${s.status === "ok" ? "" : "⚠ "}${word[s.status]}</div>
@@ -427,13 +432,15 @@ function renderTrace(steps) {
 function renderSummary(issue) {
   const text = (issue.summary || "").split("\n")
     .filter((l) => l.trim() && !l.startsWith("#"))
-    .map((l) => l.replace(/^[-*]\s*/, "").replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"));
+    // escape first, then turn **bold** into the one tag we do allow: the summary is markdown
+    // written by the agent (an LLM once R9 lands), so any other markup must stay inert text
+    .map((l) => esc(l.replace(/^[-*]\s*/, "")).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"));
   $("summary").innerHTML = text.length
     ? text.map((l) => `<p>${l}</p>`).join("")
     : `<p class="empty">сводка появится после прогона агента</p>`;
   $("warnings").innerHTML = issue.warnings?.length
     ? `<div class="warnbox"><h3>⚠ Шаги агента с замечаниями: ${issue.warnings.length}</h3>
-       <ul>${issue.warnings.map((w) => `<li>${w}</li>`).join("")}</ul></div>`
+       <ul>${issue.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></div>`
     : "";
 }
 
@@ -443,11 +450,11 @@ function renderMetrics(reports) {
   $("metrics").innerHTML = `
     <table><thead><tr><th>модель</th><th>гориз.</th><th>MAE</th><th>nMAE</th><th>сдвиг</th><th>n</th></tr></thead>
     <tbody>${r.rows.map((m) => `<tr>
-      <td>${m.model}</td><td class="num">${m.horizon}</td>
+      <td>${esc(m.model)}</td><td class="num">${m.horizon}</td>
       <td class="num">${m.mae.toFixed(3)}</td><td class="num">${m.nmae.toFixed(1)}%</td>
       <td class="num">${m.bias >= 0 ? "+" : ""}${m.bias.toFixed(3)}</td><td class="num">${m.n}</td>
     </tr>`).join("")}</tbody></table>
-    <p class="stat-l" style="margin-top:8px">период ${r.period} · обучено до ${r.train_end}</p>`;
+    <p class="stat-l" style="margin-top:8px">период ${esc(r.period)} · обучено до ${esc(r.train_end)}</p>`;
 }
 
 // The evidence JSON is written in English by the CLI; the page is Russian. Map what we know,
@@ -487,7 +494,7 @@ function renderEvidence(ev) {
       ${r.rows_scored} оценённых часов. Меньше MAE — точнее.</p>
       <div class="abl">${r.ablation.map((a, i) => `
         <div class="abl-row">
-          <span class="abl-name">${ru(a.variant)}</span>
+          <span class="abl-name">${esc(ru(a.variant))}</span>
           <span class="abl-bar"><i style="width:${(a.mae / worst) * 100}%;${i === r.ablation.length - 1 ? "background:var(--accent)" : ""}"></i></span>
           <span class="num abl-v">${a.mae.toFixed(3)}</span>
         </div>`).join("")}</div>`;
@@ -500,7 +507,7 @@ function renderEvidence(ev) {
         ${fired.map((d) => {
           const crosses = d.ci95 && d.ci95[0] < 0 && d.ci95[1] > 0;
           return `<tr>
-            <td>${ru(d.decision)}</td>
+            <td>${esc(ru(d.decision))}</td>
             <td class="num">${d.fired}</td>
             <td class="num">${d.mean_delta_mae.toFixed(4)}</td>
             <td class="num"${crosses ? ` style="color:var(--warn)"` : ""}>
@@ -512,18 +519,18 @@ function renderEvidence(ev) {
     }
     if (idle.length) {
       html += `<p class="stat-l" style="margin-top:6px">В нормальном режиме ни разу не сработали:
-        ${idle.map((d) => ru(d.decision)).join("; ")} — их ценность проверяется сценариями сбоев ниже.</p>`;
+        ${idle.map((d) => esc(ru(d.decision))).join("; ")} — их ценность проверяется сценариями сбоев ниже.</p>`;
     }
   }
 
   if (f) {
-    html += `<h3 style="font-size:14px;margin:18px 0 8px">Поведение при сбоях · выпуск ${f.issue}</h3>
+    html += `<h3 style="font-size:14px;margin:18px 0 8px">Поведение при сбоях · выпуск ${esc(f.issue)}</h3>
       <table><thead><tr><th>сбой</th><th>агент</th><th>фиксированный пайплайн</th></tr></thead><tbody>
       ${f.cases.map((c) => {
         const bad = c.fixed_pipeline.hours_from_broken_input;
         return `<tr>
-          <td>${ru(c.case)}</td>
-          <td class="num" style="color:var(--accent)">${c.agent.valid_hours} ч · ${ru(c.agent.decision)}</td>
+          <td>${esc(ru(c.case))}</td>
+          <td class="num" style="color:var(--accent)">${c.agent.valid_hours} ч · ${esc(ru(c.agent.decision))}</td>
           <td class="num"${c.fixed_pipeline.valid_hours < 48 || bad ? ` style="color:var(--warn)"` : ""}>
             ${c.fixed_pipeline.valid_hours} ч${bad ? ` · ${bad} ч по битому входу` : ""}</td>
         </tr>`;
@@ -546,8 +553,8 @@ async function loadIssue() {
     [rows, superseded] = splitRevisions(issue.rows);
     $("issue-meta").innerHTML = `
       <span>t0 <b>${dm(rows[0].issue_time_local)} ${hhmm(rows[0].issue_time_local)}</b> Алматы</span>
-      <span>модель <b>${issue.model_name}</b></span>
-      <span>погода <b>${rows[0].wx_model}</b></span>
+      <span>модель <b>${esc(issue.model_name)}</b></span>
+      <span>погода <b>${esc(rows[0].wx_model)}</b></span>
       <span>ревизия <b>${issue.revision}</b>${superseded.length ? ` · пересчитано часов: ${superseded.length}` : ""}</span>
       ${issue.fallback_used ? `<span style="color:var(--warn)"><b>⚠ был фолбэк</b></span>` : ""}`;
     draw(); renderStats(); renderLegend(); renderSummary(issue);

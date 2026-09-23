@@ -1,9 +1,12 @@
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from app.config import CORRECTION_MIN_LEAD_H, HORIZON_H
 from app.main import app
 
 client = TestClient(app)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 SAMPLE_DATE = "2026-01-31"
 
@@ -108,3 +111,23 @@ def test_post_run_runs_the_agent(monkeypatch, tmp_path):
     assert response.status_code == 200
     body = response.json()
     assert len([r for r in body["issue"]["rows"] if r["revision"] == 0]) == HORIZON_H
+
+
+# --- containment: run_id comes from the URL and becomes a filesystem path -----------------------
+def test_run_log_rejects_paths_outside_runs():
+    """A percent-encoded ".." arrives decoded, so is_dir() alone is not enough."""
+    for attack in ("%2e%2e", "..", "%2e", "~", "%2e%2e%2f%2e%2e", "runs"):
+        response = client.get(f"/api/runs/{attack}/log")
+        assert response.status_code == 404, f"{attack} дал {response.status_code}, а не 404"
+
+
+def test_page_escapes_api_text_before_innerhtml():
+    """The dispatcher summary and the agent's own strings reach innerHTML: they must be escaped.
+
+    Guards the escaper itself -- a browser test is out of scope here, so this pins the contract
+    that every interpolation of agent-written text goes through esc().
+    """
+    page = (PROJECT_ROOT / "static" / "index.html").read_text(encoding="utf-8")
+    assert "const esc = (s) =>" in page, "экранирование удалено из страницы"
+    for sink in ("esc(s.summary)", "esc(s.decision)", "esc(w)", "esc(l.replace"):
+        assert sink in page, f"текст из API попадает в innerHTML без esc(): {sink}"

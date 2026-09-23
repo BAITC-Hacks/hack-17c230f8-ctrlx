@@ -135,8 +135,16 @@ def get_forecast(issue_date: date) -> ForecastIssue:
 
 @router.get("/runs/{run_id}/log")
 def get_run_log(run_id: str) -> list[AgentStep]:
-    """Agent steps for one run. 404 only when the run directory itself is missing."""
-    if not (RUNS_DIR / run_id).is_dir():
+    """Agent steps for one run. 404 when the run directory is missing or outside runs/.
+
+    `run_id` comes straight from the URL and is used to build a filesystem path, so it must be
+    contained: the router rejects a literal "/", but a percent-encoded ".." arrives decoded and
+    would otherwise resolve above RUNS_DIR.
+    """
+    run_dir = (RUNS_DIR / run_id).resolve()
+    # must be a direct child of runs/: "." resolves to runs/ itself, which is inside runs/ but
+    # is not a run, and ".." escapes it entirely
+    if run_dir.parent != RUNS_DIR.resolve() or not run_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"прогон {run_id} не найден")
     return RunLog.read(run_id)
 
