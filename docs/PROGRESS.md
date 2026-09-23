@@ -3,3 +3,4 @@
 Формат: `- ЧЧ:ММ · кто · что сделано · тесты`. Строки добавляет `scripts/checkpoint.sh`.
 
 - 13:21 · mustafa · Mustafa Kassym · chore: team channel remote is configurable · тесты: n/a
+- 13:24 · mustafa · Мустафа · docs: task text for both candidate cases · тесты: n/a
