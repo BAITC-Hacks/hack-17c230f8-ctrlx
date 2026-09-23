@@ -1,0 +1,44 @@
+{
+  "run_id": "20260201T0000-f598e3",
+  "mode": "demo",
+  "disposition": "accepted",
+  "evidence": [
+    "quality",
+    "revisions",
+    "weather"
+  ],
+  "fallback_reason": "no_provider",
+  "trace": [],
+  "usage": {
+    "total_tokens": 0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "rounds": []
+  },
+  "facts": {
+    "quality": {
+      "run_id": "20260201T0000-f598e3",
+      "initial_hours": 48,
+      "interval_order_valid": true,
+      "fallback_used": false,
+      "warnings": [],
+      "warning_count": 0,
+      "review_required": false
+    },
+    "weather": {
+      "sources": [
+        "best_match"
+      ],
+      "fields": [
+        "day1",
+        "day2",
+        "day3"
+      ],
+      "missing_weather_rows": 0
+    },
+    "revisions": {
+      "revised_hours": 34,
+      "max_power_change": 0.188
+    }
+  }
+}

@@ -1,9 +1,10 @@
 """Contract (lead): data-frame columns, forecast rows, agent log lines, metrics, API."""
 
+import math
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # --- data frames (pandas), column names are the contract ---------------------------------------
 # data/processed/hourly.parquet — one row per (time_utc, turbine)
@@ -60,15 +61,26 @@ class ForecastRow(BaseModel):
     revision: int = Field(ge=0, description="0 = at t0, 1 = intraday recompute at t0 + 12 h")
     power_t1: float = Field(ge=0, le=1)
     power_t2: float = Field(ge=0, le=1)
-    power_farm: float = Field(ge=0, le=1, description="mean of the two turbines")
+    power_farm: float = Field(ge=0, le=1, description="forecast of mean station power")
     p10: float = Field(ge=0, le=1)
     p90: float = Field(ge=0, le=1)
-    ws100_fc: float
+    ws100_fc: float | None
     wx_field: WxField
     wx_model: str
     model_name: ModelName
     fallback_used: bool = False
     run_id: str
+
+    @field_validator("ws100_fc", mode="before")
+    @classmethod
+    def normalize_missing_wind(cls, value):
+        """R5: CSV blanks and non-finite missing weather round-trip as JSON null."""
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        try:
+            return value if math.isfinite(float(value)) else None
+        except (TypeError, ValueError):
+            return value  # pydantic reports genuinely malformed values
 
 
 FORECAST_COLUMNS = list(ForecastRow.model_fields)

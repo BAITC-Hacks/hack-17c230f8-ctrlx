@@ -172,23 +172,47 @@ def run_model(sel: pd.DataFrame, model_name: str) -> pd.DataFrame:
 
 @tool("Validate a forecast and list dispatcher risks (ramps, calm, cold, low confidence)")
 def analyze(
-    pred: pd.DataFrame, sel: pd.DataFrame, gfs_sel: pd.DataFrame | None, offset: float = 0.0
+    pred: pd.DataFrame,
+    sel: pd.DataFrame,
+    gfs_sel: pd.DataFrame | None,
+    offset: float = 0.0,
+    *,
+    model_name: str = "gbm",
 ) -> dict:
     p = pred["power_farm"].to_numpy()
-    finite = bool(np.isfinite(p).all())
+    published = pred[["power_t1", "power_t2", "power_farm", "p10", "p90"]].to_numpy()
+    finite = bool(np.isfinite(published).all())
+    in_range = bool(((published >= 0) & (published <= 1)).all())
+    aligned = bool(
+        len(pred) == len(sel)
+        and pred["lead"].tolist() == sel["lead"].tolist()
+        and pred["target"].tolist() == sel["target"].tolist()
+    )
     ordered = bool((pred["p10"] <= pred["power_farm"] + 1e-9).all()) and bool(
         (pred["power_farm"] <= pred["p90"] + 1e-9).all()
     )
-    flat = bool(np.nanstd(p) < config.FLATLINE_STD and np.nanmean(sel["ws100"]) > 6)
-    gap = float(np.nanmean(np.abs(p - pred["pc"].to_numpy())))
+    wind = sel["ws100"].to_numpy()
+    weather_checks = model_name != "climatology"
+    flat = bool(
+        weather_checks
+        and np.isfinite(p).any()
+        and np.isfinite(wind).any()
+        and np.nanstd(p) < config.FLATLINE_STD
+        and np.nanmean(wind) > 6
+    )
+    differences = np.abs(p - pred["pc"].to_numpy())
+    gap = float(np.nanmean(differences)) if np.isfinite(differences).any() else None
     ws_max = float(np.nanmax(sel["ws100"])) if sel["ws100"].notna().any() else float("nan")
     out_of_range = bool(ws_max > model().ws_train_max * 1.1)
     checks = {
         "finite": finite,
+        "within_power_bounds": in_range,
+        "aligned_horizon": aligned,
         "ordered_quantiles": ordered,
         "no_flatline": not flat,
-        "close_to_power_curve": gap <= config.MAX_MEAN_GAP_TO_POWER_CURVE,
-        "wind_inside_training_range": not out_of_range,
+        "close_to_power_curve": not weather_checks
+        or (gap is not None and gap <= config.MAX_MEAN_GAP_TO_POWER_CURVE),
+        "wind_inside_training_range": not weather_checks or not out_of_range,
     }
     local = pd.DatetimeIndex(pred["target"]).tz_convert(config.LOCAL_TZ)
     ramp = np.abs(pd.Series(p).diff(config.RAMP_HOURS).to_numpy()) >= config.RAMP_DELTA
@@ -209,7 +233,7 @@ def analyze(
     return {
         "ok": all(checks.values()),
         "checks": checks,
-        "gap_to_power_curve": round(gap, 3),
+        "gap_to_power_curve": round(gap, 3) if gap is not None else None,
         "risks": risks,
     }
 

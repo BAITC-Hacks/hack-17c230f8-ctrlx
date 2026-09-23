@@ -18,6 +18,10 @@ from app import llm
 from app.schemas import ForecastIssue
 
 
+class PlannerFailure(ValueError):
+    """Only hardcoded local failure categories may be included in artifacts."""
+
+
 class Finish(BaseModel):
     model_config = ConfigDict(extra="forbid")
     disposition: Literal["accepted", "review"]
@@ -153,10 +157,10 @@ def supervise(issue: ForecastIssue, output_dir: Path, *, complete=None) -> dict:
             for round_number in range(1, 5):
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    raise ValueError("time_budget")
+                    raise PlannerFailure("time_budget")
                 reply = complete(messages, TOOL_SPECS, timeout=min(8, remaining / 2))
                 if reply is None:
-                    raise ValueError("provider_unavailable")
+                    raise PlannerFailure("provider_unavailable")
                 round_usage = {
                     "round": round_number,
                     "provider": reply["provider"],
@@ -166,21 +170,21 @@ def supervise(issue: ForecastIssue, output_dir: Path, *, complete=None) -> dict:
                 for key in ("total_tokens", "input_tokens", "output_tokens"):
                     value = reply.get("tokens" if key == "total_tokens" else key, 0)
                     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-                        raise ValueError("invalid_usage")
+                        raise PlannerFailure("invalid_usage")
                     round_usage[key] = value
                     usage[key] += value
                 usage["rounds"].append(round_usage)
                 if time.monotonic() >= deadline:
-                    raise ValueError("time_budget")
+                    raise PlannerFailure("time_budget")
                 msg = reply["message"]
                 calls = msg.get("tool_calls", [])
                 if msg.get("role") != "assistant" or not isinstance(calls, list):
-                    raise ValueError("invalid_message")
+                    raise PlannerFailure("invalid_message")
                 if not calls or calls_total + len(calls) > 8:
-                    raise ValueError("tool_budget_or_missing_call")
+                    raise PlannerFailure("tool_budget_or_missing_call")
                 if any(call.get("function", {}).get("name") == "finish" for call in calls):
                     if len(calls) != 1:
-                        raise ValueError("finish_requires_observed_results")
+                        raise PlannerFailure("finish_requires_observed_results")
                 messages.append(msg)
                 for call in calls:
                     calls_total += 1
@@ -191,21 +195,21 @@ def supervise(issue: ForecastIssue, output_dir: Path, *, complete=None) -> dict:
                         or not call_id
                         or call_id in call_ids
                     ):
-                        raise ValueError("invalid_tool_call")
+                        raise PlannerFailure("invalid_tool_call")
                     call_ids.add(call_id)
                     name = call["function"]["name"]
                     raw_args = call["function"]["arguments"]
                     if not isinstance(raw_args, str) or len(raw_args) > 4000:
-                        raise ValueError("invalid_arguments")
+                        raise PlannerFailure("invalid_arguments")
                     args = json.loads(raw_args)
                     if name == "finish":
                         final = Finish.model_validate(args)
                         if not required <= seen or not required <= set(final.evidence):
-                            raise ValueError("missing_evidence")
+                            raise PlannerFailure("missing_evidence")
                         if not set(final.evidence) <= seen:
-                            raise ValueError("unobserved_evidence")
+                            raise PlannerFailure("unobserved_evidence")
                         if len(final.evidence) != len(set(final.evidence)):
-                            raise ValueError("duplicate_evidence")
+                            raise PlannerFailure("duplicate_evidence")
                         disposition = final.disposition
                         if facts["quality"]["review_required"]:
                             disposition = "review"
@@ -214,7 +218,7 @@ def supervise(issue: ForecastIssue, output_dir: Path, *, complete=None) -> dict:
                         observation = facts[name]
                         seen.add(name)
                     else:
-                        raise ValueError("forbidden_tool_or_arguments")
+                        raise PlannerFailure("forbidden_tool_or_arguments")
                     trace.append(
                         {
                             "tool": name,
@@ -222,7 +226,7 @@ def supervise(issue: ForecastIssue, output_dir: Path, *, complete=None) -> dict:
                             "provider": reply["provider"],
                             "model": reply["model"],
                             "round": round_number,
-                            "round_tokens": reply["tokens"],
+                            "round_tokens": round_usage["total_tokens"],
                         }
                     )
                     messages.append(
@@ -244,7 +248,9 @@ def supervise(issue: ForecastIssue, output_dir: Path, *, complete=None) -> dict:
                     break
         except Exception as exc:
             # Stable categories only: provider error bodies may contain credentials.
-            result["fallback_reason"] = type(exc).__name__
+            result["fallback_reason"] = (
+                str(exc) if isinstance(exc, PlannerFailure) else type(exc).__name__
+            )
     output_dir.mkdir(parents=True, exist_ok=True)
     path = output_dir / "supervisor.json"
     temporary = None

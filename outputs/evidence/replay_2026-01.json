@@ -11,37 +11,37 @@
     },
     {
       "variant": "B fixed pipeline: power curve, no checks, no recompute",
-      "mae": 0.1948
+      "mae": 0.1953
     },
     {
       "variant": "C model only: gradient boosting at t0, no recompute",
-      "mae": 0.1535
+      "mae": 0.1555
     },
     {
       "variant": "D agent, published plan: D+1 recomputed at 12:00, D+2 bid at t0",
-      "mae": 0.1515
+      "mae": 0.1536
     }
   ],
   "decisions": [
     {
       "decision": "main model vs fallback model (C vs B): boosting kept in every issue",
       "fired": 31,
-      "mean_delta_mae": -0.0419,
+      "mean_delta_mae": -0.0407,
       "ci95": [
-        -0.0578,
-        -0.0261
+        -0.0563,
+        -0.0255
       ],
-      "wins": 23
+      "wins": 24
     },
     {
       "decision": "recompute at t0+12 h with fresher runs (revision 1)",
       "fired": 31,
-      "mean_delta_mae": -0.0053,
+      "mean_delta_mae": -0.0064,
       "ci95": [
-        -0.0139,
-        0.0027
+        -0.0152,
+        0.0017
       ],
-      "wins": 19
+      "wins": 18
     },
     {
       "decision": "fallback to a simpler model after a failed check",

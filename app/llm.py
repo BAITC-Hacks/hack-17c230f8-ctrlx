@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Literal
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import AuthenticationError, OpenAI, PermissionDeniedError
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -137,6 +137,10 @@ def complete_json[ModelT: BaseModel](
                     provider=base_url, model=model, tokens=getattr(usage, "total_tokens", 0) or 0
                 ))
                 return result
-            except Exception as exc:  # any failure -> next attempt / provider / template
+            except (AuthenticationError, PermissionDeniedError) as exc:
+                # A different JSON format cannot repair rejected credentials or permissions.
+                logger.warning("complete_json failed (%s): %s", model, type(exc).__name__)
+                break
+            except Exception as exc:  # invalid format -> next attempt / provider / template
                 logger.warning("complete_json failed (%s): %s", model, type(exc).__name__)
     return None

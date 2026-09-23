@@ -8,9 +8,10 @@ plan -> fetch_weather -> validate_weather [-> older run / gfs fallback] -> prepa
 import hashlib
 import json
 import re
-import shutil
 import time
 from datetime import date, timedelta
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import numpy as np
 import pandas as pd
@@ -18,6 +19,7 @@ import pandas as pd
 from app import config
 from app.agent import tools
 from app.agent.log import RunLog
+from app.agent.storage import issue_lock, publish_files
 from app.features import issue_time_utc
 from app.schemas import FORECAST_COLUMNS, ForecastIssue, ForecastRow, LlmInfo
 
@@ -36,6 +38,7 @@ MONTHS = [
     "декабря",
 ]
 FALLBACK_LADDER = ["gbm", "power_curve", "climatology"]
+MODEL_FAILURES = (ValueError, RuntimeError, KeyError, IndexError, TypeError, FloatingPointError)
 MODEL_TITLES = {
     "gbm": "градиентный бустинг (медиана) с калиброванным коридором p10–p90",
     "power_curve": "кривая мощности по прогнозному ветру (запасная модель)",
@@ -92,7 +95,9 @@ def _rows(pred, sel, t0, revision, model_name, wx_model, fallback, run_id) -> li
                 power_farm=round(float(pred["power_farm"].iloc[i]), 4),
                 p10=round(float(pred["p10"].iloc[i]), 4),
                 p90=round(float(pred["p90"].iloc[i]), 4),
-                ws100_fc=round(float(sel["ws100"].iloc[i]), 2),
+                ws100_fc=None
+                if model_name == "climatology"
+                else round(float(sel["ws100"].iloc[i]), 2),
                 wx_field=(
                     f"day{int(sel['field'].iloc[i])}"
                     if sel["field"].iloc[i] > 0 and model_name != "climatology"
@@ -108,11 +113,32 @@ def _rows(pred, sel, t0, revision, model_name, wx_model, fallback, run_id) -> li
 
 
 def _forecast_with_ladder(log: RunLog, sel, gfs_sel, start_model: str, offset: float):
-    """Run the model; on a failed check step down the ladder (at most 2 corrections)."""
-    ladder = FALLBACK_LADDER[FALLBACK_LADDER.index(start_model) :]
+    """R5: every source follows bounded model execution, acceptance and final rejection."""
+    ladder = (
+        ["gfs_power_curve", "climatology"]
+        if start_model == "gfs_power_curve"
+        else FALLBACK_LADDER[FALLBACK_LADDER.index(start_model) :]
+    )
     for attempt, name in enumerate(ladder):
         s = time.perf_counter()
-        pred = tools.run_model(sel, name)
+        last = attempt == len(ladder) - 1
+        decision = "reject" if last else f"fallback → {ladder[attempt + 1]}"
+        try:
+            pred = tools.run_model(sel, name)
+            check = tools.analyze(pred, sel, gfs_sel, offset, model_name=name)
+        except MODEL_FAILURES as exc:
+            log.step(
+                "run_model",
+                "fail",
+                f"Модель «{name}» недоступна: {type(exc).__name__}",
+                args={"model_name": name},
+                started=s,
+                decision=decision,
+                reason="ошибка модели; недопустимый результат не публикуется",
+            )
+            if last:
+                raise ValueError("Ни одна модель не сформировала допустимый прогноз") from exc
+            continue
         log.step(
             "run_model",
             "ok",
@@ -121,32 +147,37 @@ def _forecast_with_ladder(log: RunLog, sel, gfs_sel, start_model: str, offset: f
             args={"model_name": name},
             started=s,
         )
-        s = time.perf_counter()
-        check = tools.analyze(pred, sel, gfs_sel, offset)
         failed = [k for k, v in check["checks"].items() if not v]
-        if check["ok"] or attempt == len(ladder) - 1:
+        if check["ok"]:
             log.step(
                 "analyze",
-                "ok" if check["ok"] else "warn",
-                f"Проверки: {'не пройдено: ' + ', '.join(failed) if failed else 'все пройдены'}; "
-                f"расхождение с кривой мощности {check['gap_to_power_curve']:.2f}",
+                "ok",
+                "Проверки прогноза пройдены"
+                + (
+                    "; погодные проверки неприменимы к запасной климатологии"
+                    if name == "climatology"
+                    else ""
+                ),
                 args={"checks": check["checks"], "risks": check["risks"]},
                 started=s,
                 decision="accept",
-                reason="прогноз согласован с физикой и диапазонами"
-                if check["ok"]
-                else "последняя ступень, публикуем с предупреждением",
+                reason="полный горизонт, конечные мощности обеих турбин и согласованные квантили",
             )
-            return pred, name, attempt > 0 or start_model != "gbm", check
+            published_name = "power_curve" if name == "gfs_power_curve" else name
+            return pred, published_name, attempt > 0 or start_model != "gbm", check
         log.step(
             "analyze",
-            "warn",
+            "fail" if last else "warn",
             f"Не пройдено: {', '.join(failed)}",
             started=s,
             args={"checks": check["checks"]},
-            decision=f"fallback → {ladder[attempt + 1]}",
-            reason="самокоррекция: переходим на более простую и устойчивую модель",
+            decision=decision,
+            reason="последняя модель не прошла проверку; публикация отменена"
+            if last
+            else "самокоррекция: переходим на более простую и устойчивую модель",
         )
+        if last:
+            raise ValueError("Ни одна модель не прошла проверку прогноза: " + ", ".join(failed))
     raise RuntimeError("unreachable")
 
 
@@ -178,19 +209,24 @@ def _summary(issue_date, t0, rows0, rows1, check, recompute, reflect, prev, val,
     latest["target"] = pd.to_datetime(latest["target_time_utc"], utc=True)
     d1, d2 = latest[latest["lead_h"] < 24], latest[latest["lead_h"] >= 24]
     pk = latest.loc[latest["power_farm"].idxmax()]
+    peak_wind = (
+        f"при прогнозном ветре {pk.ws100_fc:.1f} м/с"
+        if pd.notna(pk.ws100_fc)
+        else "погодные данные недоступны, применена климатология"
+    )
     mw = config.RATED_MW
     lines = [
         f"Выпуск за {_day(pd.Timestamp(issue_date, tz=config.LOCAL_TZ))}: прогноз сделан "
         f"{_when(t0)} по Алматы по итогам дня, горизонт 48 ч.",
         "",
-        f"- {_day(d1['target'].iloc[0]).capitalize()}: средняя выработка "
+        f"- {_day(d1['target'].iloc[0]).capitalize()} (оперативный прогноз): средняя выработка "
         f"{d1.power_farm.mean():.0%} номинала ({d1.power_farm.mean() * mw:.1f} МВт), "
         f"энергия {d1.power_farm.sum() * mw:.0f} МВт·ч.",
-        f"- {_day(d2['target'].iloc[0]).capitalize()} (черновик суточной заявки, подать до 08:00 "
-        f"{_day(d1['target'].iloc[0])}): средняя {d2.power_farm.mean():.0%} "
+        f"- {_day(d2['target'].iloc[0]).capitalize()} (оперативный прогноз): "
+        f"средняя {d2.power_farm.mean():.0%} "
         f"({d2.power_farm.mean() * mw:.1f} МВт), энергия {d2.power_farm.sum() * mw:.0f} МВт·ч.",
         f"- Пик: {_when(pk.target)} — {pk.power_farm:.0%} ({pk.power_farm * mw:.1f} МВт) "
-        f"при прогнозном ветре {pk.ws100_fc:.1f} м/с.",
+        f"{peak_wind}.",
         f"- Коридор p10–p90 в среднем {(latest.p90 - latest.p10).mean():.0%} номинала.",
     ]
     r = check["risks"]
@@ -203,9 +239,14 @@ def _summary(issue_date, t0, rows0, rows1, check, recompute, reflect, prev, val,
         risk.append(f"холодовой риск недовыработки {r['cold_risk_hours']} ч")
     if r.get("nwp_disagree_hours"):
         risk.append(f"погодные модели расходятся {r['nwp_disagree_hours']} ч")
-    lines.append("- Риски: " + ("; ".join(risk) if risk else "существенных нет") + ".")
     lines.append(
-        f"- Погода: Open-Meteo, источник {val['source']}, свежесть прогонов: "
+        "- Риски исходного прогноза (ревизия 0): "
+        + ("; ".join(risk) if risk else "существенных нет")
+        + "."
+    )
+    lines.append(
+        f"- Погода исходного прогноза (ревизия 0): Open-Meteo, источник {val['source']}, "
+        "свежесть прогонов: "
         + ", ".join(f"{k}×{v}" for k, v in sorted(val["fields"].items()))
         + "."
     )
@@ -308,6 +349,43 @@ def run_issue(
     out_dir=config.OUTPUTS_FORECASTS,
     runs_dir=config.RUNS_DIR,
 ) -> ForecastIssue:
+    """R5: build privately, then atomically publish each complete file under an issue lock."""
+    out_dir, runs_dir = Path(out_dir), Path(runs_dir)
+    with issue_lock(out_dir, issue_date):
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        with TemporaryDirectory(prefix=".stage-", dir=runs_dir) as directory:
+            stage = Path(directory)
+            issue = _build_issue(
+                issue_date,
+                refresh=refresh,
+                model_name=model_name,
+                llm=llm,
+                out_dir=out_dir,
+                runs_dir=stage / "runs",
+                forecast_dir=stage / "forecasts",
+            )
+            staged_run = stage / "runs" / issue.run_id
+            files = [
+                (path, runs_dir / issue.run_id / path.name)
+                for path in sorted(staged_run.iterdir())
+                if path.is_file()
+            ]
+            name = f"issue_{issue_date.isoformat()}.csv"
+            files.append((stage / "forecasts" / name, out_dir / name))
+            publish_files(files)
+            return issue
+
+
+def _build_issue(
+    issue_date: date,
+    *,
+    refresh: bool,
+    model_name: str,
+    llm: bool,
+    out_dir: Path,
+    runs_dir: Path,
+    forecast_dir: Path,
+) -> ForecastIssue:
     t_all = time.perf_counter()
     t0 = issue_time_utc(issue_date)
     if tools.model().train_end > t0:
@@ -318,7 +396,6 @@ def run_issue(
             "по факту используйте `python -m app.cli replay --month YYYY-MM`"
         )
     run_id = _run_id(issue_date, t0)
-    shutil.rmtree(runs_dir / run_id, ignore_errors=True)
     log = RunLog(run_id, t0.to_pydatetime(), base_dir=runs_dir)
 
     f = tools.facts()
@@ -459,21 +536,14 @@ def run_issue(
         started=s,
     )
 
-    start = use_model if use_model in FALLBACK_LADDER else "gbm"
-    if use_model == "gfs_power_curve":
-        pred = tools.run_model(sel, "gfs_power_curve")
-        check = tools.analyze(pred, sel, None, offset)
-        used, fallback = "power_curve", True
-        log.step(
-            "run_model",
-            "warn",
-            "Кривая мощности по gfs_seamless (запасной источник)",
-            args={"model_name": "gfs_power_curve"},
-            decision="fallback",
-            reason="основной источник погоды недоступен",
-        )
-    else:
-        pred, used, fallback, check = _forecast_with_ladder(log, sel, gsel, start, offset)
+    pred, used, fallback, check = _forecast_with_ladder(
+        log,
+        sel,
+        gsel if wx_model == "best_match" else None,
+        use_model,
+        offset,
+    )
+    fallback = fallback or decision != "proceed"
     rows0 = _rows(pred, sel, t0, 0, used, wx_model, fallback, run_id)
 
     s = time.perf_counter()
@@ -487,8 +557,12 @@ def run_issue(
     val1 = tools.validate_weather(sel1, t0, config.INTRADAY_REFRESH_H) if changed else None
     pred1 = check1 = None
     if val1 is not None and val1["ok"] and used != "climatology":
-        pred1 = tools.run_model(sel1, used if wx_model == "best_match" else "gfs_power_curve")
-        check1 = tools.analyze(pred1, sel1, None, offset)
+        try:
+            revision_model = used if wx_model == "best_match" else "gfs_power_curve"
+            pred1 = tools.run_model(sel1, revision_model)
+            check1 = tools.analyze(pred1, sel1, None, offset, model_name=revision_model)
+        except MODEL_FAILURES:
+            check1 = {"ok": False}
     if changed and used != "climatology" and (val1 is None or not val1["ok"] or not check1["ok"]):
         failed = "проверку погоды" if not val1["ok"] else "проверку прогноза"
         log.step(
@@ -585,8 +659,8 @@ def run_issue(
     if llm:
         facts_json = json.dumps({"summary": template, "risks": check["risks"]}, ensure_ascii=False)
         summary, llm_info, llm_note = _llm_summary(facts_json, template)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / f"issue_{issue_date.isoformat()}.csv"
+    forecast_dir.mkdir(parents=True, exist_ok=True)
+    path = forecast_dir / f"issue_{issue_date.isoformat()}.csv"
     pd.DataFrame(rows0 + rows1, columns=FORECAST_COLUMNS).to_csv(
         path, index=False, lineterminator="\n"
     )

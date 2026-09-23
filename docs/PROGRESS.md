@@ -54,3 +54,4 @@
 - 16:32 · mustafa · Мустафа · fix: readable recompute wording in the agent log; README leak rule for revision 1 (h=12); ask-the-agent status in SOLUTION; regenerated logs (R5, R6) · тесты: pass
 - 16:33 · mustafa · Мустафа · Harden LLM failures and supervisor evidence checks (R9) · тесты: pass
 - 16:34 · ansar · Ансар · fix: a failed issue load clears the screen instead of showing the previous one; one unreadable file no longer kills the issue list (R8) · тесты: pass
+- 16:48 · mustafa · Мустафа · Fix resilient publication and regenerate validated forecasts (R1-R7,R9) · тесты: pass
