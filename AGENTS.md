@@ -8,12 +8,6 @@
 - Не влезает по времени — режь scope, а не качество запуска.
 
 ## Стек и команды
-<!-- stack:web -->
-Next.js 16 (App Router) · TypeScript · Tailwind 4 · shadcn/ui · zod · vitest · `openai` (OpenAI-совместимый клиент)
-- установка `pnpm install` · dev `pnpm dev` (порт 3000) · сборка `pnpm build`
-- **проверка:** `pnpm lint && pnpm typecheck && pnpm test`
-- ядро `lib/core.ts` (rule-based) · LLM `lib/llm.ts` · оркестрация `lib/analyze.ts` · **контракт** `lib/types.ts` · ПДн `lib/pii.ts` · API `app/api/*` · UI `components/`, `app/page.tsx`
-<!-- /stack:web -->
 <!-- stack:py -->
 Python 3.12 · uv · FastAPI · pydantic · pandas · pytest · `openai` (OpenAI-совместимый клиент)
 - установка `uv sync` · запуск `uv run uvicorn app.main:app --reload --port 8000` · CLI `uv run python -m app.cli data/sample.json`

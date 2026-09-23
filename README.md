@@ -33,19 +33,25 @@ flowchart LR
 
 ### Быстрый старт (без ключей, ~2 минуты)
 ```bash
-# ≤ 3 команды, копируются как есть
+uv sync
+uv run uvicorn app.main:app --port 8000   # http://localhost:8000
 ```
 Без `LLM_API_KEY` проект работает в DEMO-режиме: <что именно даёт rule-based путь>.
 
 ### Установка
-- Требования: <Node 22 + pnpm | Python 3.12 + uv>, macOS/Linux/Windows
-- <Шаги установки. Альтернатива: Docker, если есть.>
+- Требования: Python 3.12 и [uv](https://docs.astral.sh/uv/) — или pip, или Docker
+- `uv sync` (версии зафиксированы в `uv.lock`); без uv: `pip install -r requirements.txt`
+- Docker: `docker build -t ctrlx . && docker run -p 8000:8000 ctrlx`
+- Ключи — по желанию: `cp .env.example .env.local`
 
 ### Запуск
-<Команды dev/prod, порт, CLI.>
+- API и страница: `uv run uvicorn app.main:app --port 8000` → http://localhost:8000
+- CLI: `uv run python -m app.cli data/sample.json`
+- Тесты и линтер: `uv run pytest -q && uv run ruff check .`
+- Метрики качества: `uv run python -m app.evaluate data/labeled.json --out docs/METRICS.md`
 
 ### Зависимости
-<Где список (package.json / pyproject.toml / requirements.txt) и ключевые пакеты.>
+Список — `pyproject.toml` / `requirements.txt`: fastapi, uvicorn, pydantic, pandas, openai, python-dotenv; разработка — pytest, httpx, ruff.
 
 ### Переменные окружения
 | Переменная | Обязательна | По умолчанию | Назначение |
@@ -64,7 +70,11 @@ flowchart LR
 2. Ожидаемый результат: <что увидит эксперт>
 
 ```bash
-# curl или CLI с примером входа и ожидаемым выходом
+curl -s -X POST http://localhost:8000/api/analyze \
+  -H 'content-type: application/json' \
+  -d '{"text":"Пример текста для проверки основного сценария"}'
+# → JSON: label, score, summary, reasons, mode ("demo" без ключа)
+# пакетно: uv run python -m app.cli data/sample.json
 ```
 
 ### Тесты и метрики

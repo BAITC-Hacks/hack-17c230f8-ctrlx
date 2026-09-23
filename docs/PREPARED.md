@@ -8,14 +8,14 @@
 | Скрипты разработки | `scripts/`, `.githooks/` | проверка секретов, коммиты, smoke-тест, деплой |
 | Шаблоны документации | `README.md`, `docs/` | структура README по п. 5.4.15 и инструкции организаторов, требования, прогресс |
 | Справка по домену «Финансы» | `docs/DOMAIN-FINANCE.md` | регуляторика, открытые данные, метрики, паттерны архитектуры, обзор 10 типовых сценариев ИИ в финсекторе — опора для разбора ТЗ, не решения; собрана по открытым источникам, ссылки внутри |
-<!-- skeleton -->
+| Каркас приложения (py) | `app/`, `static/`, `tests/`, `Dockerfile` | FastAPI: API + CLI + страница → rule-based ядро / LLM-клиент, маскирование ПДн перед LLM, оценка метриками, health-check, тесты |
 
 Источник: приватный репозиторий-заготовка команды (только инструменты и шаблоны), версия `8039bd3` от 23.09.2026 12:48. По запросу организаторов откроем к нему доступ.
 
 ## Сторонние компоненты
 - Скилл `ui-craft` — объединение и адаптация скиллов `frontend-design` (Anthropic, Apache-2.0) и `emil-design-eng` (Emil Kowalski, github.com/emilkowalski/skill @85e8e23, MIT); лицензии и оригинальные тексты — в `.agents/skills/ui-craft/`.
 - Скилл `grilling` — Matt Pocock, github.com/mattpocock/skills (коммит c55ee46), MIT (`.agents/skills/grilling/LICENSE`), без изменений.
-<!-- skeleton-deps -->
+- FastAPI, pydantic, pytest, ruff — MIT; uvicorn, pandas, python-dotenv, httpx — BSD-3-Clause; openai-python — Apache-2.0.
 
 ## AI-инструменты разработки
 Claude Code (Anthropic), OpenAI Codex.
