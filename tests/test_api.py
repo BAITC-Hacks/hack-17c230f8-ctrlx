@@ -151,3 +151,12 @@ def test_issues_skips_an_unreadable_file_instead_of_failing(monkeypatch, tmp_pat
     assert response.status_code == 200
     dates = [i["issue_date"] for i in response.json()]
     assert dates == ["2026-01-31"], f"ожидался только читаемый выпуск, получено {dates}"
+
+
+def test_ask_answers_from_the_issue_journal():
+    response = client.post(
+        "/api/ask", json={"run_id": _run_id(), "question": "Почему пересчитали?"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"] and body["mode"] in ("llm", "demo")

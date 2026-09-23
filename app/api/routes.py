@@ -23,6 +23,8 @@ from app.agent.log import RunLog
 from app.config import OUTPUTS_FORECASTS, OUTPUTS_METRICS, RUNS_DIR
 from app.schemas import (
     AgentStep,
+    AskAnswer,
+    AskRequest,
     ForecastIssue,
     ForecastRow,
     IssueListItem,
@@ -223,9 +225,7 @@ def get_evidence() -> dict:
                 out[key] = json.loads(path.read_text(encoding="utf-8"))
             except json.JSONDecodeError as exc:
                 log.exception("%s: не разбирается как JSON", path.name)
-                raise HTTPException(
-                    status_code=500, detail=f"{path.name}: файл повреждён"
-                ) from exc
+                raise HTTPException(status_code=500, detail=f"{path.name}: файл повреждён") from exc
     return out
 
 
@@ -246,3 +246,17 @@ def post_run(request: RunRequest) -> RunResponse:
         log_path=str((RUNS_DIR / issue.run_id / "agent_log.jsonl").relative_to(RUNS_DIR.parent)),
         report_path=str((RUNS_DIR / issue.run_id / "report.md").relative_to(RUNS_DIR.parent)),
     )
+
+
+@router.post("/ask")
+def post_ask(request: AskRequest) -> AskAnswer:
+    """«Спросить агента»: answer from the journal and rows of one issue (app/ask.py).
+
+    Without an LLM key the answer is a template; with a key every number is checked against facts.
+    """
+    from app.ask import answer  # local import: the read-only API does not need the ask stack
+
+    try:
+        return answer(request.run_id, request.question)
+    except ValueError as exc:  # e.g. an invalid run_id
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
