@@ -100,6 +100,11 @@ def test_poisoned_future_does_not_change_the_forecast():
     assert persistence(facts, t0) == persistence(tools.facts(), t0)
 
 
+def test_issue_inside_the_training_period_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="период обучения"):
+        run_issue(date(2026, 1, 10), out_dir=tmp_path / "f", runs_dir=tmp_path / "r")
+
+
 def test_batch_selector_matches_the_weather_module():
     """Training uses features.select_many, the weather module has its own selector: same rows."""
     t0 = issue_time_utc(ISSUE)

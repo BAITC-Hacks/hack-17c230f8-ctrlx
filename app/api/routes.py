@@ -228,6 +228,9 @@ def post_run(request: RunRequest) -> RunResponse:
     """Trigger one issue through the agent. 503 while the agent cannot run on this machine."""
     try:
         issue = run_forecast(request.issue_date, refresh=request.refresh, llm=request.llm)
+    except ValueError as exc:
+        # e.g. an issue inside the model's training period: refusing is the leak-safe answer
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except (ImportError, OSError) as exc:
         # the model stack does not load on this OS -- reading finished issues still works
         raise HTTPException(status_code=503, detail=AGENT_UNAVAILABLE) from exc

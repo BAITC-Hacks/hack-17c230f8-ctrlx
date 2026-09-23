@@ -305,6 +305,13 @@ def run_issue(
 ) -> ForecastIssue:
     t_all = time.perf_counter()
     t0 = issue_time_utc(issue_date)
+    if tools.model().train_end > t0:
+        # the model has already seen the facts of this period: such a "forecast" would leak
+        raise ValueError(
+            f"выпуск за {issue_date} попадает в период обучения модели "
+            f"(обучена до {tools.model().train_end:%Y-%m-%d %H:%M} UTC); для проверки прошлого "
+            "по факту используйте `python -m app.cli replay --month YYYY-MM`"
+        )
     run_id = _run_id(issue_date, t0)
     shutil.rmtree(runs_dir / run_id, ignore_errors=True)
     log = RunLog(run_id, t0.to_pydatetime(), base_dir=runs_dir)
