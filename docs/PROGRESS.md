@@ -63,3 +63,4 @@
 - 17:06 · mustafa · Мустафа · platform: honest wording — admissible by the 7 h rule (not a proven publication time), bid-hour costs, D+2 bid is the pre-recompute version (R8) · тесты: pass
 - 17:08 · amirkhan · Амирхан · fix: reject malformed weather and unsupported forecast explanations (R2,R9) · тесты: pass
 - 17:15 · mustafa · Мустафа · platform redesign: plain words, one hero per screen, far less text, generous spacing, explanations behind «Как читать»; README section on the platform (R6, R8) · тесты: pass
+- 17:17 · mustafa · Мустафа · LLM demo run (OpenAI gpt-4.1-mini): dispatcher summary passed the number check, committed in runs/llm_demo for experts without a key (R9) · тесты: pass
