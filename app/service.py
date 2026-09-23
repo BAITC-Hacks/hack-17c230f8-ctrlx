@@ -5,7 +5,13 @@ from datetime import date, timedelta
 import pandas as pd
 
 from app.agent.orchestrator import run_issue
-from app.config import FEBRUARY_PATH, OUTPUTS_FORECASTS, TEST_ISSUE_FIRST, TEST_ISSUE_LAST
+from app.config import (
+    FEBRUARY_PATH,
+    OUTPUTS_FORECASTS,
+    RATED_MW,
+    TEST_ISSUE_FIRST,
+    TEST_ISSUE_LAST,
+)
 from app.schemas import ForecastIssue
 
 
@@ -63,7 +69,8 @@ def write_february(issues: list[ForecastIssue]) -> pd.DataFrame:
     out["plan_run_id"] = plan["run_id"].reindex(hours)
     out["power_farm_bid"] = bid["power_farm"].reindex(hours)
     out["bid_run_id"] = bid["run_id"].reindex(hours)
-    out["plan_mw"] = (out["power_farm_plan"] * 5.0).round(3)
+    out["plan_mw"] = (out["power_farm_plan"] * RATED_MW).round(3)
+    out["bid_mw"] = (out["power_farm_bid"] * RATED_MW).round(3)
     OUTPUTS_FORECASTS.mkdir(parents=True, exist_ok=True)
     out.reset_index().to_csv(FEBRUARY_PATH, index=False)
     return out

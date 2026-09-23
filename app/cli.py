@@ -83,12 +83,9 @@ def main(argv: list[str]) -> int:
             from app.evaluate import main as evaluate_main
 
             return evaluate_main(["--holdout", args.holdout])
-    except NotImplementedError as exc:
-        print(f"not implemented yet: {exc}", file=sys.stderr)
-        return 3
-    except ImportError as exc:
-        print(f"module not ready: {exc}", file=sys.stderr)
-        return 3
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     return 0
 
 

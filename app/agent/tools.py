@@ -124,12 +124,27 @@ def validate_weather(sel: pd.DataFrame, t0: pd.Timestamp, hours_since_issue: int
     }
 
 
+@tool("Drop physically impossible or missing wind values so the selector falls back to older runs")
+def mask_invalid(wx: pd.DataFrame) -> pd.DataFrame:
+    lo, hi = config.WS_VALID_RANGE
+    clean = wx.copy()
+    cols = [c for c in clean.columns if c.startswith(("ws100_d", "ws10_d"))]
+    bad = (clean[cols] < lo) | (clean[cols] > hi)
+    clean[cols] = clean[cols].mask(bad)
+    return clean
+
+
 @tool("Mean wind of the primary source over the last 30 days vs the training period")
 def source_shift(wx: pd.DataFrame, t0: pd.Timestamp) -> dict:
     w = wx.set_index("time_utc")["ws100_d2"]
     recent = w[(w.index >= t0 - pd.Timedelta(days=30)) & (w.index < t0)].mean()
     train = w[(w.index < model().train_end)].mean()
-    return {"recent_mean_ws": round(float(recent), 2), "train_mean_ws": round(float(train), 2)}
+    shifted = bool(np.isfinite(recent) and abs(recent - train) > config.SOURCE_SHIFT_WS)
+    return {
+        "recent_mean_ws": round(float(recent), 2),
+        "train_mean_ws": round(float(train), 2),
+        "source_shift": shifted,
+    }
 
 
 @tool("Run a model: gbm (gradient boosting + CQR), power_curve, climatology or gfs_power_curve")

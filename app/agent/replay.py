@@ -119,7 +119,7 @@ def replay(month: str = "2026-01") -> dict:
     switched = [s for s in steps if s.tool == "validate_weather" and s.decision != "proceed"]
     ledger = [
         {
-            "decision": "use gradient boosting instead of the power curve (analyze → accept)",
+            "decision": "main model vs fallback model (C vs B): the agent kept boosting in all issues",
             "fired": int(len(choice_issue)),
             "mean_delta_mae": round(float(choice_issue.mean()), 4),
             "ci95": _ci(choice_issue.to_numpy()),
@@ -180,6 +180,11 @@ def faults() -> dict:
     )
     ws_cols = [c for c in best.columns if c.startswith(("ws100_", "ws10_"))]
 
+    def broken_fresh(frame, mask, value):
+        f = frame.copy()
+        f.loc[mask, ["ws100_d1", "ws10_d1"]] = value
+        return f
+
     def broken(frame, mask, value):
         f = frame.copy()
         f.loc[mask, ws_cols] = value
@@ -190,6 +195,9 @@ def faults() -> dict:
             "best_match": broken(best, window, np.nan)
         },
         "wind spike 100 m/s in the primary source": {"best_match": broken(best, window, 100.0)},
+        "wind spike 100 m/s only in the freshest run (day1)": {
+            "best_match": broken_fresh(best, window, 100.0)
+        },
         "primary source unavailable": {"best_match": best.iloc[0:0]},
         "both sources broken": {
             "best_match": broken(best, window, np.nan),

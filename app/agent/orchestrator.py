@@ -84,8 +84,12 @@ def _rows(pred, sel, t0, revision, model_name, wx_model, fallback, run_id) -> li
                 p10=round(float(pred["p10"].iloc[i]), 4),
                 p90=round(float(pred["p90"].iloc[i]), 4),
                 ws100_fc=round(float(sel["ws100"].iloc[i]), 2),
-                wx_field=f"day{int(sel['field'].iloc[i])}" if sel["field"].iloc[i] > 0 else "none",
-                wx_model=wx_model,
+                wx_field=(
+                    f"day{int(sel['field'].iloc[i])}"
+                    if sel["field"].iloc[i] > 0 and model_name != "climatology"
+                    else "none"
+                ),
+                wx_model=wx_model if model_name != "climatology" else "none",
                 model_name=model_name,
                 fallback_used=fallback,
                 run_id=run_id,
@@ -124,7 +128,7 @@ def _forecast_with_ladder(log: RunLog, sel, gfs_sel, start_model: str, offset: f
                 if check["ok"]
                 else "последняя ступень, публикуем с предупреждением",
             )
-            return pred, name, attempt > 0, check
+            return pred, name, attempt > 0 or start_model != "gbm", check
         log.step(
             "analyze",
             "warn",
@@ -347,7 +351,21 @@ def run_issue(
     shift = tools.source_shift(wx, t0)
     offset = tools.nwp_offset(wx, wg, t0)
     wx_model, use_model = "best_match", model_name
+    older_ok = False
     if not val["ok"]:
+        # 1) the same source, older run: drop impossible values, the selector takes day N+1
+        wx_clean = tools.mask_invalid(wx)
+        sel_old = tools.select_weather(wx_clean, t0)
+        val_old = tools.validate_weather(sel_old, t0)
+        older_ok = val_old["ok"]
+        if older_ok:
+            wx, sel, val = wx_clean, sel_old, val_old
+    if older_ok:
+        decision, reason = (
+            "older_run",
+            "в самом свежем прогоне плохие значения — взят более старый прогон того же источника",
+        )
+    elif not val["ok"]:
         gval = tools.validate_weather(gsel, t0)
         if gval["ok"]:
             sel, val, wx_model, use_model = gsel, gval, "gfs_seamless", "gfs_power_curve"
@@ -362,7 +380,7 @@ def run_issue(
         )
     log.step(
         "validate_weather",
-        "ok" if val["ok"] else "warn",
+        "ok" if val["ok"] and decision == "proceed" and not shift["source_shift"] else "warn",
         f"Покрыто {val['covered']}/{val['hours']} ч, "
         f"диапазон {'ок' if val['in_range'] else 'нарушен'}, "
         f"допустимость прогонов {'ок' if val['admissible'] else 'НАРУШЕНА'}; свежесть: "
@@ -373,6 +391,12 @@ def run_issue(
             f"; самый свежий использованный прогон стал доступен за "
             f"{val['min_margin_h']:.0f} ч до момента прогноза"
             if val.get("min_margin_h") is not None
+            else ""
+        )
+        + (
+            f"; ВНИМАНИЕ: средний ветер источника сдвинулся больше чем на "
+            f"{config.SOURCE_SHIFT_WS:.0f} м/с — возможна смена модели погоды"
+            if shift["source_shift"]
             else ""
         ),
         args={**val, **shift},
@@ -419,9 +443,23 @@ def run_issue(
     )
     later = sel1["lead"] >= config.CORRECTION_MIN_LEAD_H
     changed = int((sel1.loc[later, "field"] != sel.loc[later, "field"]).sum())
-    if changed and used != "climatology":
-        val1 = tools.validate_weather(sel1, t0, config.INTRADAY_REFRESH_H)
+    val1 = tools.validate_weather(sel1, t0, config.INTRADAY_REFRESH_H) if changed else None
+    pred1 = check1 = None
+    if val1 is not None and val1["ok"] and used != "climatology":
         pred1 = tools.run_model(sel1, used if wx_model == "best_match" else "gfs_power_curve")
+        check1 = tools.analyze(pred1, sel1, None, offset)
+    if changed and used != "climatology" and (val1 is None or not val1["ok"] or not check1["ok"]):
+        failed = "проверку погоды" if not val1["ok"] else "проверку прогноза"
+        log.step(
+            "recompute_if_updated",
+            "warn",
+            f"В {_when(t1)} вышел более свежий прогон для {changed} ч, но он не прошёл {failed}",
+            args={"hours_since_issue": config.INTRADAY_REFRESH_H, "changed_hours": changed},
+            started=s,
+            decision="keep_revision_0",
+            reason="ревизия 1 публикуется только после тех же проверок, что и основной выпуск",
+        )
+    elif changed and used != "climatology":
         keep = later.to_numpy()
         pred1, s1 = pred1[keep].reset_index(drop=True), sel1[keep].reset_index(drop=True)
         delta = np.abs(pred1["power_farm"].to_numpy() - pred["power_farm"].to_numpy()[keep])
@@ -510,7 +548,7 @@ def run_issue(
         f"черновик заявки на D+2 {bid_path}",
         started=t_all,
         llm=llm_info,
-        decision="llm" if llm_info else "template",
+        decision=("llm" if summary != template else ("llm_rejected" if llm_info else "template")),
         reason=llm_note or "шаблонная сводка по фактам выпуска",
     )
     return ForecastIssue(

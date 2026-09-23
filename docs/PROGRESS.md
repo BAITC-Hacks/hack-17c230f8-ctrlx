@@ -35,3 +35,4 @@
 - 15:57 · ansar · Ансар · fix(security): contain run_id to a child of runs/, escape agent text before innerHTML (R8) · тесты: pass
 - 15:59 · mustafa · Мустафа · agent: hourly day-ahead bid draft for D+2 in MWh (Astana time) next to each report + test; regenerated runs (R5, R10) · тесты: pass
 - 15:59 · amirkhan · Амирхан · test(weather): value-level leak tests over 28 issues x {0,12} h (run-encoded synthetic values kill fresher-run/ws10/bfill mutants); clear FileNotFoundError/ValueError instead of an empty frame, atomic cache write, payload check, attrs source (R2) · тесты: pass
+- 16:04 · mustafa · Мустафа · agent: older-run fallback before switching source, rev1 only after the same checks, honest climatology labels, source-shift threshold, LLM-rejected label, bid MW column; 5th fault case; CLI error handler (R5, R10) · тесты: pass

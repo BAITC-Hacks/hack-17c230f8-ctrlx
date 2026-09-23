@@ -24,7 +24,7 @@
   ],
   "decisions": [
     {
-      "decision": "use gradient boosting instead of the power curve (analyze → accept)",
+      "decision": "main model vs fallback model (C vs B): the agent kept boosting in all issues",
       "fired": 31,
       "mean_delta_mae": -0.0398,
       "ci95": [

@@ -86,6 +86,7 @@ WIDE_INTERVAL = 0.6
 NWP_SPREAD_WS = 3.0  # m/s between best_match and gfs_seamless
 MATERIAL_MEAN_DELTA, MATERIAL_MAX_DELTA = 0.05, 0.2  # recompute counts as a real change
 DRIFT_T_STAT, DRIFT_DAYS = 2.0, 7
+SOURCE_SHIFT_WS = 1.0  # m/s: 30-day mean forecast wind vs training mean (NWP source change / drift)
 
 
 def safe_previous_day(lead_h: int, hours_since_issue: int = 0) -> int:
