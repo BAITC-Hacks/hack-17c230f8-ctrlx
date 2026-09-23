@@ -19,6 +19,7 @@ OUTPUTS_METRICS = ROOT / "outputs" / "metrics"
 RUNS_DIR = ROOT / "runs"
 
 HOURLY_PATH = DATA_PROCESSED / "hourly.parquet"
+HOURLY_META = DATA_PROCESSED / "hourly.meta.json"  # sha256 of the raw CSVs behind the parquet
 FEBRUARY_PATH = OUTPUTS_FORECASTS / "february_2026.csv"
 
 

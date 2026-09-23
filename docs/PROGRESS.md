@@ -71,3 +71,4 @@
 - 17:26 · mustafa · Мустафа · Finalize release evidence and accurate integration guidance (R6,R8,R9) · тесты: pass
 - 17:27 · ansar · Ансар · docs: README numbers match the 17:21 metrics and replay JSON (R6, R7) · тесты: pass
 - 17:30 · ansar · Ансар · Document final clean-clone verification and align replay evidence (R6,R8) · тесты: pass
+- 17:31 · mustafa · Мустафа · forecast on any new date: the agent fetches the weather window live by both turbines' coordinates when the archive does not cover the issue (archive untouched, offline falls back safely); hash-based hourly cache freshness for new SCADA files; platform button «Прогноз на новую дату»; README; tests (R2, R4, R5, R8) · тесты: pass

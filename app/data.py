@@ -1,10 +1,13 @@
 """R1 — historical SCADA data: raw 10-minute CSVs -> hourly per turbine and farm series (UTC)."""
 
+import json
+
 import pandas as pd
 
 from app.config import (
     DATA_RAW,
     DATA_TZ,
+    HOURLY_META,
     HOURLY_PATH,
     LOCAL_TZ,
     MIN_SAMPLES_PER_HOUR,
@@ -59,7 +62,30 @@ def build_hourly(save: bool = True) -> pd.DataFrame:
     if save:
         HOURLY_PATH.parent.mkdir(parents=True, exist_ok=True)
         out.to_parquet(HOURLY_PATH, index=False)
+        HOURLY_META.write_text(json.dumps(_raw_hashes(), indent=1) + "\n", encoding="utf-8")
     return out
+
+
+def _raw_hashes() -> dict[str, str]:
+    import hashlib
+
+    return {
+        t.raw_file: hashlib.sha256((DATA_RAW / t.raw_file).read_bytes()).hexdigest()
+        for t in TURBINES.values()
+    }
+
+
+def _hourly_cache_fresh() -> bool:
+    """New or replaced raw CSVs (e.g. facts for a new month) invalidate the cache automatically.
+
+    Content hashes, not file times: a fresh git clone gives every file a new mtime.
+    """
+    if not HOURLY_PATH.exists() or not HOURLY_META.exists():
+        return False
+    try:
+        return json.loads(HOURLY_META.read_text(encoding="utf-8")) == _raw_hashes()
+    except (OSError, ValueError):
+        return False
 
 
 def farm_hourly(hourly: pd.DataFrame | None = None) -> pd.DataFrame:
@@ -69,7 +95,7 @@ def farm_hourly(hourly: pd.DataFrame | None = None) -> pd.DataFrame:
     Its available observation is still retained for the per-turbine model.
     """
     if hourly is None:
-        hourly = pd.read_parquet(HOURLY_PATH) if HOURLY_PATH.exists() else build_hourly()
+        hourly = pd.read_parquet(HOURLY_PATH) if _hourly_cache_fresh() else build_hourly()
     w = hourly.pivot(index="time_utc", columns="turbine", values=["power", "ws", "temp"])
     out = pd.DataFrame(index=w.index)
     for tid in TURBINES:

@@ -375,6 +375,28 @@ function IssuesView() {
     if (d) router.replace(`/issues?date=${d}`, { scroll: false });
   };
 
+  const [newDate, setNewDate] = useState("");
+
+  async function forecastNewDate() {
+    if (!newDate || running) return;
+    setElapsed(0);
+    setRunning(newDate);
+    try {
+      await api.run(newDate, true); // fresh date: the agent fetches the weather window itself
+      toast.success("Прогноз готов", { description: capitalize(dayLabel(newDate)) });
+      setListKey((k) => k + 1);
+      router.replace(`/issues?date=${newDate}`);
+      setIssueKey((k) => k + 1);
+    } catch (e: unknown) {
+      const err = toApiError(e);
+      toast.error(err.status === 422 ? "Агент отказал" : "Не удалось сделать прогноз", {
+        description: capitalize(err.message),
+      });
+    } finally {
+      setRunning(null);
+    }
+  }
+
   async function recompute() {
     if (!date || running) return;
     const d = date;
@@ -468,6 +490,31 @@ function IssuesView() {
             </>
           )}
         </Button>
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void forecastNewDate();
+          }}
+        >
+          <label className="sr-only" htmlFor="new-date">Новая дата</label>
+          <input
+            id="new-date"
+            type="date"
+            value={newDate}
+            min="2026-02-01"
+            onChange={(e) => setNewDate(e.target.value)}
+            className="h-9 rounded-md border bg-card px-2 text-sm"
+            aria-label="Новая дата прогноза"
+          />
+          <Button type="submit" variant="outline" disabled={!newDate || running !== null}>
+            Прогноз на новую дату
+          </Button>
+          <Explain>
+            Любая дата после периода обучения: агент сам запросит у Open-Meteo прогнозы погоды
+            для этих суток по координатам турбин и посчитает выработку на 48 часов. Нужна сеть.
+          </Explain>
+        </form>
         <div className="flex flex-wrap items-center gap-1 sm:ml-auto">
           <Link href={`/bid${q}`} className={buttonVariants({ variant: "ghost" })}>
             <FileSpreadsheet aria-hidden />

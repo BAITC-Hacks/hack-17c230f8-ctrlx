@@ -424,9 +424,9 @@ def _build_issue(
     s = time.perf_counter()
     # the committed archive stays the source of truth (reproducibility); --refresh adds a live
     # request of this issue's window by the turbines' coordinates and compares it with the archive
-    wx = tools.fetch_weather("best_match", False)
-    wg = tools.fetch_weather("gfs_seamless", False)
-    live = tools.live_check(t0) if refresh else None
+    wx, wxinfo = tools.weather_for_issue("best_match", t0, refresh)
+    wg, _ = tools.weather_for_issue("gfs_seamless", t0, refresh)
+    live = tools.live_check(t0) if refresh and wxinfo["covered"] else None
     cells = wx.attrs.get("cells") or []
     same = wx.attrs.get("same_cell")
     where = (
@@ -434,7 +434,19 @@ def _build_issue(
         if cells
         else "по координатам ВЭС"
     )
-    if live is None:
+    if wxinfo["source"] == "live":
+        decision = "live"
+        reason = (
+            f"архив не покрывает этот выпуск — окно погоды докачано из Open-Meteo "
+            f"({wxinfo['live_hours']} ч); закоммиченный архив не изменён"
+        )
+    elif not wxinfo["covered"]:
+        decision = "cache"
+        reason = (
+            "архив не покрывает этот выпуск, а живой запрос недоступен "
+            f"({wxinfo.get('live_error', 'нет сети')}); дальше решает проверка погоды"
+        )
+    elif live is None:
         decision, reason = "cache", "офлайн-архив из репозитория (ответ API, sha256 в meta.json)"
     elif not live.get("live"):
         decision, reason = "cache", f"живой запрос недоступен ({live.get('reason', '')[:80]})"
@@ -449,13 +461,16 @@ def _build_issue(
         )
     log.step(
         "fetch_weather",
-        "ok" if decision != "live_mismatch" else "warn",
+        "warn"
+        if decision == "live_mismatch" or (decision == "cache" and not wxinfo["covered"])
+        else "ok",
         f"Open-Meteo Previous Runs {where}: best_match и gfs_seamless, {len(wx)} ч архива",
         args={
             "models": ["best_match", "gfs_seamless"],
             "refresh": refresh,
             "cells": cells,
             "live_check": live,
+            "weather_source": wxinfo,
         },
         started=s,
         decision=decision,

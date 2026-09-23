@@ -46,6 +46,15 @@ def fake_pipeline(monkeypatch):
             }
         ),
     )
+    # the live window belongs to real dates outside the archive; here the stub IS the archive
+    monkeypatch.setattr(
+        tools,
+        "weather_for_issue",
+        lambda name, t0_, refresh: (
+            tools.fetch_weather(name, refresh),
+            {"source": "archive", "covered": True},
+        ),
+    )
 
     def select_weather(wx, t0, hours_since_issue=0):
         source = wx["source"].iloc[0]

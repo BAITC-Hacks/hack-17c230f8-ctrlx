@@ -89,6 +89,56 @@ def live_check(t0: pd.Timestamp, model_name: str = "best_match") -> dict:
     return weather.fetch_issue_window(t0, model_name)
 
 
+def archive_covers(wx: pd.DataFrame, t0: pd.Timestamp) -> bool:
+    """True when the archive has rows for every hour of the 48 h horizon.
+
+    Bad values inside the archive are the validator's job (older run → other source → climatology);
+    only a date the archive does not reach at all triggers a live request.
+    """
+    last = t0 + pd.Timedelta(hours=config.HORIZON_H - 1)
+    rows = wx[(wx["time_utc"] >= t0) & (wx["time_utc"] <= last)]
+    return len(rows) == config.HORIZON_H
+
+
+@tool("Fetch the issue window live from Open-Meteo (any date) and lay it over the archive")
+def weather_for_issue(
+    model_name: str, t0: pd.Timestamp, refresh: bool
+) -> tuple[pd.DataFrame, dict]:
+    """The committed archive is the source of truth for the test period. For a date it does not
+    cover (or on --refresh) the agent requests the window [t0-2d, t0+3d] itself by the turbines'
+    coordinates and overlays those hours; the committed cache files are never modified."""
+    import json
+    import urllib.request
+
+    archive = fetch_weather(model_name, False)
+    try:
+        covered = archive_covers(archive, t0)
+    except (KeyError, TypeError, AttributeError):  # injected test frames without the raw columns
+        covered = True
+    info: dict = {"source": "archive", "covered": covered}
+    if info["covered"]:  # the test period always comes from the committed archive
+        return archive, info
+    start = (t0 - pd.Timedelta(days=30)).strftime("%Y-%m-%d")  # 30 d: source-shift baseline
+    end = (t0 + pd.Timedelta(days=3)).strftime("%Y-%m-%d")
+    url = weather.build_url(model_name, start, end)
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:  # fixed https endpoint
+            payload = json.loads(resp.read())
+        weather._check_payload(payload)
+        live = weather.to_frame(payload)
+    except weather._FETCH_ERRORS as exc:  # offline: stay on the archive, the validator decides
+        info.update(source="archive", live_error=f"{type(exc).__name__}")
+        return archive, info
+    keep = archive[~archive["time_utc"].isin(live["time_utc"])]
+    merged = (
+        pd.concat([keep, live], ignore_index=True).sort_values("time_utc").reset_index(drop=True)
+    )
+    merged.attrs.update(archive.attrs)
+    merged.attrs["source"] = "live"
+    info.update(source="live", live_hours=int(len(live)), url=url)
+    return merged, info
+
+
 @tool("Pick, for each of the 48 target hours, the freshest run already published at the issue")
 def select_weather(wx: pd.DataFrame, t0: pd.Timestamp, hours_since_issue: int = 0) -> pd.DataFrame:
     return select_many(wx, [t0], hours_since_issue)

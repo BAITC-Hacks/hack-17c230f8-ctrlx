@@ -161,11 +161,11 @@ export const api = {
   log: (runId: string) => request<AgentStep[]>(`/api/runs/${encodeURIComponent(runId)}/log`),
   metrics: () => request<MetricsReport[]>("/api/metrics"),
   evidence: () => request<Evidence>("/api/evidence"),
-  run: (date: string) =>
+  run: (date: string, refresh = false) =>
     request<{ run_id: string; issue: ForecastIssue }>("/api/run", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ issue_date: date }),
+      body: JSON.stringify({ issue_date: date, refresh }),
     }),
   ask: (runId: string, question: string) =>
     request<AskAnswer>("/api/ask", {
