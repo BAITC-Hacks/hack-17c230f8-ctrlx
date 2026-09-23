@@ -12,7 +12,9 @@ the model stack, so the API and the page keep working wherever the agent itself 
 
 import csv
 import json
+import logging
 from datetime import date
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import ValidationError
@@ -29,10 +31,10 @@ from app.schemas import (
     RunResponse,
 )
 
+log = logging.getLogger(__name__)
 router = APIRouter()
 
 ISSUE_PREFIX = "issue_"
-AGENT_NOT_WIRED = "агент ещё не подключён"
 AGENT_UNAVAILABLE = (
     "агент недоступен на этой машине: не загружается библиотека моделей. "
     "Чтение готовых выпусков и страница работают; см. README → «Ограничения»."
@@ -64,8 +66,11 @@ def _read_rows(path) -> list[ForecastRow]:
     try:
         return [ForecastRow.model_validate(row) for row in raw]
     except ValidationError as exc:
+        # str(ValidationError) echoes input_value of every bad field: that is server file
+        # content, so it stays in the server log and never goes out in the response
+        log.exception("%s: не соответствует контракту ForecastRow", path.name)
         raise HTTPException(
-            status_code=500, detail=f"{path.name}: не соответствует контракту ForecastRow: {exc}"
+            status_code=500, detail=f"{path.name}: файл повреждён или не соответствует контракту"
         ) from exc
 
 
@@ -74,8 +79,35 @@ def _latest(rows: list[ForecastRow]) -> ForecastRow:
     return max(rows, key=lambda r: (r.revision, -r.lead_h))
 
 
+def _run_dir(run_id: str) -> Path | None:
+    """The run's directory, or None when `run_id` does not name one directly under runs/.
+
+    Single place that contains a run_id before it becomes a filesystem path: it arrives either
+    from the URL or from a forecast CSV, and neither is validated elsewhere. "." resolves to
+    runs/ itself, which is inside runs/ but is not a run; ".." escapes it.
+    """
+    run_dir = (RUNS_DIR / run_id).resolve()
+    if run_dir.parent != RUNS_DIR.resolve() or not run_dir.is_dir():
+        return None
+    return run_dir
+
+
+def _read_log(run_id: str) -> list[AgentStep]:
+    """Agent steps for a run. A malformed JSONL line is a 500 naming the file, not a bare crash."""
+    try:
+        return RunLog.read(run_id)
+    except ValidationError as exc:
+        log.exception("runs/%s/agent_log.jsonl: не соответствует контракту AgentStep", run_id)
+        raise HTTPException(
+            status_code=500, detail=f"runs/{run_id}/agent_log.jsonl: файл повреждён"
+        ) from exc
+
+
 def _read_summary(run_id: str) -> str:
-    report = RUNS_DIR / run_id / "report.md"
+    run_dir = _run_dir(run_id)
+    if run_dir is None:
+        return ""
+    report = run_dir / "report.md"
     return report.read_text(encoding="utf-8").strip() if report.exists() else ""
 
 
@@ -115,11 +147,17 @@ def get_forecast(issue_date: date) -> ForecastIssue:
         raise HTTPException(status_code=404, detail=f"выпуск {issue_date.isoformat()} пуст")
 
     head = _latest(rows)
-    warnings = [
-        f"шаг {s.step} ({s.tool}): {s.reason or s.summary}"
-        for s in RunLog.read(head.run_id)
-        if s.status in ("warn", "fail")
-    ]
+    # The forecast itself does not depend on the log: a corrupt log must not hide a valid issue
+    # (this is the main scenario). /runs/{id}/log, where the log IS the payload, still 500s.
+    try:
+        steps = _read_log(head.run_id)
+        warnings = [
+            f"шаг {s.step} ({s.tool}): {s.reason or s.summary}"
+            for s in steps
+            if s.status in ("warn", "fail")
+        ]
+    except HTTPException:
+        warnings = [f"журнал прогона {head.run_id} повреждён — замечания агента не прочитаны"]
     return ForecastIssue(
         issue_date=issue_date,
         issue_time_utc=head.issue_time_utc,
@@ -141,12 +179,9 @@ def get_run_log(run_id: str) -> list[AgentStep]:
     contained: the router rejects a literal "/", but a percent-encoded ".." arrives decoded and
     would otherwise resolve above RUNS_DIR.
     """
-    run_dir = (RUNS_DIR / run_id).resolve()
-    # must be a direct child of runs/: "." resolves to runs/ itself, which is inside runs/ but
-    # is not a run, and ".." escapes it entirely
-    if run_dir.parent != RUNS_DIR.resolve() or not run_dir.is_dir():
+    if _run_dir(run_id) is None:
         raise HTTPException(status_code=404, detail=f"прогон {run_id} не найден")
-    return RunLog.read(run_id)
+    return _read_log(run_id)
 
 
 @router.get("/metrics")
@@ -157,11 +192,13 @@ def get_metrics() -> list[MetricsReport]:
         try:
             reports.append(MetricsReport.model_validate_json(path.read_text(encoding="utf-8")))
         except (ValidationError, json.JSONDecodeError) as exc:
+            log.exception("%s: не соответствует контракту MetricsReport", path.name)
             raise HTTPException(
                 status_code=500,
-                detail=f"{path.name}: не соответствует контракту MetricsReport: {exc}",
+                detail=f"{path.name}: файл повреждён или не соответствует контракту",
             ) from exc
-    reports.sort(key=lambda r: r.created_at, reverse=True)
+    # by period, not created_at: the order must not depend on which evaluate ran last
+    reports.sort(key=lambda r: r.period, reverse=True)
     return reports
 
 
@@ -179,8 +216,9 @@ def get_evidence() -> dict:
             try:
                 out[key] = json.loads(path.read_text(encoding="utf-8"))
             except json.JSONDecodeError as exc:
+                log.exception("%s: не разбирается как JSON", path.name)
                 raise HTTPException(
-                    status_code=500, detail=f"{path.name}: не разбирается как JSON: {exc}"
+                    status_code=500, detail=f"{path.name}: файл повреждён"
                 ) from exc
     return out
 
@@ -190,8 +228,6 @@ def post_run(request: RunRequest) -> RunResponse:
     """Trigger one issue through the agent. 503 while the agent cannot run on this machine."""
     try:
         issue = run_forecast(request.issue_date, refresh=request.refresh, llm=request.llm)
-    except NotImplementedError as exc:
-        raise HTTPException(status_code=503, detail=AGENT_NOT_WIRED) from exc
     except (ImportError, OSError) as exc:
         # the model stack does not load on this OS -- reading finished issues still works
         raise HTTPException(status_code=503, detail=AGENT_UNAVAILABLE) from exc

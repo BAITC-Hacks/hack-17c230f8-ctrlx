@@ -242,7 +242,11 @@ const FRESH = {
   day1: { label: "day1 · прогноз сутки назад", fill: "var(--accent-soft)", hatch: false },
   day2: { label: "day2 · двое суток назад", fill: "var(--accent-faint)", hatch: true },
   day3: { label: "day3 · трое суток назад", fill: "var(--accent-faint)", hatch: true },
+  // contract allows "none": no admissible weather run, the agent fell back to climatology.
+  // Must not be shown as a day3 forecast -- there was no forecast at all for those hours.
+  none: { label: "без прогноза погоды · климатология", fill: "rgba(180, 83, 9, 0.10)", hatch: true },
 };
+const FRESH_UNKNOWN = { label: "источник погоды неизвестен", fill: "var(--accent-faint)", hatch: true };
 
 let issues = [], idx = 0, rows = [], superseded = [], series = "power_farm";
 
@@ -284,15 +288,18 @@ function draw() {
   }
   const L = (r) => +r.lead_h;
 
-  // uncertainty band, split into runs of equal wx_field so staleness is visible without hover
+  // Uncertainty band, split into runs of equal wx_field so staleness is visible without hover.
+  // p10/p90 are farm-level (contract): drawing them under a single-turbine line would put two
+  // different physical quantities in one picture, so the band only shows for the farm series.
+  const bandShown = series === "power_farm";
   let bands = "";
   let s = 0;
-  for (let i = 1; i <= n; i++) {
+  for (let i = 1; bandShown && i <= n; i++) {
     if (i === n || rows[i].wx_field !== rows[s].wx_field) {
       const seg = rows.slice(s, i);
       const top = seg.map((r) => `${x(L(r))},${y(+r.p90)}`).join(" ");
       const bot = seg.map((r) => `${x(L(r))},${y(+r.p10)}`).reverse().join(" ");
-      const f = FRESH[rows[s].wx_field] || FRESH.day3;
+      const f = FRESH[rows[s].wx_field] || FRESH_UNKNOWN;
       bands += `<polygon points="${top} ${bot}" fill="${f.fill}"/>`;
       if (f.hatch) bands += `<polygon points="${top} ${bot}" fill="url(#hatch)"/>`;
       s = i;
@@ -361,7 +368,8 @@ function wireHover(x, y, val) {
     dot.setAttribute("cx", cx); dot.setAttribute("cy", y(val(r))); dot.setAttribute("opacity", "1");
     const was = superseded.find((q) => +q.lead_h === +r.lead_h);
     tip.innerHTML = `<b>${dm(r.target_time_local)} ${hhmm(r.target_time_local)}</b> · +${r.lead_h} ч
-      <br>выработка <span class="num">${pct(val(r))}</span> · p10–p90 <span class="num">${pct(+r.p10)}–${pct(+r.p90)}</span>
+      <br>выработка <span class="num">${pct(val(r))}</span>${series === "power_farm"
+        ? ` · p10–p90 <span class="num">${pct(+r.p10)}–${pct(+r.p90)}</span>` : ""}
       <br>ветер <span class="num">${(+r.ws100_fc).toFixed(1)}</span> м/с · погода ${esc(r.wx_field)}
       ${was ? `<br>до пересчёта было <span class="num">${pct(+was[series])}</span>` : ""}`;
     tip.style.left = `${(cx / W) * 100}%`;
@@ -385,14 +393,14 @@ function renderStats() {
   $("stats").innerHTML = `
     <div><div class="stat-v">${pct(mean)}</div><div class="stat-l">среднее за 48 ч</div></div>
     <div><div class="stat-v">${pct(Math.max(...v))}</div><div class="stat-l">пик · ${dm(pk.target_time_local)} ${hhmm(pk.target_time_local)}</div></div>
-    <div><div class="stat-v">±${pct(width / 2)}</div><div class="stat-l">средняя неопределённость</div></div>
+    <div><div class="stat-v">±${pct(width / 2)}</div><div class="stat-l">средняя неопределённость, по парку</div></div>
     <div class="${calm ? "stat-warn" : ""}"><div class="stat-v">${calm} ч</div><div class="stat-l">штиль, ниже 10%</div></div>`;
 }
 
 function renderLegend() {
   const used = [...new Set(rows.map((r) => r.wx_field))].sort();
   const chips = used.map((f) => {
-    const c = FRESH[f] || FRESH.day3;
+    const c = FRESH[f] || FRESH_UNKNOWN;
     const bg = c.hatch
       ? `background:var(--accent-faint);background-image:repeating-linear-gradient(45deg,rgba(14,124,134,.3) 0 1px,transparent 1px 5px)`
       : `background:var(--accent-soft)`;
@@ -400,6 +408,7 @@ function renderLegend() {
   }).join("");
   $("legend").innerHTML = `
     <span><span class="swatch" style="background:var(--accent);height:3px;border-radius:2px"></span>ожидаемая выработка</span>
+    ${series === "power_farm" ? "" : `<span style="color:var(--warn)">коридор p10–p90 считается по парку, для одной турбины не показан</span>`}
     ${superseded.length ? `<span><span class="swatch" style="height:0;border-top:1.5px dashed var(--ink-faint)"></span>до пересчёта в t0+12 ч</span>` : ""}
     ${chips}
     <span class="seg" role="group" aria-label="Разрез">
@@ -446,15 +455,15 @@ function renderSummary(issue) {
 
 function renderMetrics(reports) {
   if (!reports.length) { $("metrics").innerHTML = `<p class="empty">метрики считаются — появятся после бэктеста</p>`; return; }
-  const r = reports[0];
-  $("metrics").innerHTML = `
-    <table><thead><tr><th>модель</th><th>гориз.</th><th>MAE</th><th>nMAE</th><th>сдвиг</th><th>n</th></tr></thead>
+  // every hold-out period, not just one: which file was generated last is not a criterion
+  $("metrics").innerHTML = reports.map((r) => `
+    <p class="stat-l" style="margin:0 0 6px"><b>период ${esc(r.period)}</b> · обучено до ${esc(r.train_end)}</p>
+    <table style="margin-bottom:14px"><thead><tr><th>модель</th><th>гориз.</th><th>MAE</th><th>nMAE</th><th>сдвиг</th><th>n</th></tr></thead>
     <tbody>${r.rows.map((m) => `<tr>
-      <td>${esc(m.model)}</td><td class="num">${m.horizon}</td>
+      <td>${esc(m.model)}</td><td class="num">${esc(m.horizon)}</td>
       <td class="num">${m.mae.toFixed(3)}</td><td class="num">${m.nmae.toFixed(1)}%</td>
       <td class="num">${m.bias >= 0 ? "+" : ""}${m.bias.toFixed(3)}</td><td class="num">${m.n}</td>
-    </tr>`).join("")}</tbody></table>
-    <p class="stat-l" style="margin-top:8px">период ${esc(r.period)} · обучено до ${esc(r.train_end)}</p>`;
+    </tr>`).join("")}</tbody></table>`).join("");
 }
 
 // The evidence JSON is written in English by the CLI; the page is Russian. Map what we know,
